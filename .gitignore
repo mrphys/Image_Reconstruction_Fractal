@@ -1,9 +1,0 @@
-TrainingFolder/*
-!TrainingFolder/Default_VarNet
-!TrainingFolder/Default_3DUNet
-!TrainingFolder/Default_FastDVDNet
-
-DatasetFolder/*
-!DatasetFolder/README.md
-
-train_network_fulldataset.py

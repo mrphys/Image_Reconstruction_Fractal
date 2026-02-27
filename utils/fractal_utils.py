@@ -1,3 +1,13 @@
+"""
+Utils for sysnthetic dataset building with fractals
+
+Methods details in : 
+
+
+@author: Anirudh Raman
+"""
+
+
 import numpy as np
 from numba import njit, prange
 from scipy.ndimage import gaussian_filter

@@ -1,3 +1,12 @@
+"""
+Code to generate sampling trajectories and densities for undersampled MR 
+
+Methods details in : 
+Investigating the use of high spatio-temporal resolution publicly available natural videos to learn Dynamic MR image reconstruction
+
+@author: Dr. Olivier Jaubert
+"""
+
 import tensorflow as tf
 import tensorflow_mri as tfmri
 
@@ -165,6 +174,7 @@ def create_traj_fn( radial_spokes=0,
             'ordering': ordering,
             }
             traj = tfmri.sampling.radial_trajectory(**traj_params)
+            traj = tfmri.sampling.flatten_trajectory(traj)
             dens = tfmri.sampling.estimate_radial_density(traj)
             dcw = tf.math.divide_no_nan(1.0,dens)
             time_for_an_arm=(min_max_arm_time[1]+min_max_arm_time[0])/2
@@ -202,4 +212,3 @@ def create_traj_fn( radial_spokes=0,
         return ds
         
     return _create_traj
-  

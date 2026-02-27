@@ -1,3 +1,12 @@
+"""
+Code to convert a fully-sampled image into paired training data for DL reconstruction models 
+
+Methods details in : 
+Investigating the use of high spatio-temporal resolution publicly available natural videos to learn Dynamic MR image reconstruction
+
+@author: Dr. Olivier Jaubert
+"""
+
 import tensorflow as tf
 import tensorflow_mri as tfmr
 import tensorflow_nufft as tfft
@@ -9,14 +18,15 @@ def config_base_preproc():
             'phases': 32,
             'roll': 0,
             'input_format': 'coil_compressed',
+            'input_coils': 10,
             'output_format': 'abs',
-            'normalize_input': False,
+            'normalize_input': True,
     }
     return config
 
 # Main Preprocessing Function
 def preprocessing_fn(base_resolution=128,
-                      phases=20,roll=0,output_format=None,input_format=None,gfilt=None,normalize_input=True,return_kspace=False):
+                      phases=20,roll=0,output_format=None,input_format=None,input_coils=None, gfilt=None,normalize_input=True,return_kspace=False):
   """Returns a preprocessing function for training."""
   
   def _preprocessing_fn(inputs):
@@ -42,10 +52,9 @@ def preprocessing_fn(base_resolution=128,
       traj= inputs['traj']['traj']
       dcw= inputs['traj']['dcw']
       reps=tf.cast(tf.math.ceil(phases/tf.shape(traj)[0]), tf.int32)
-      traj=tf.tile(traj,[reps,1,1,1])
-      dcw=tf.tile(dcw,[reps,1,1])
+      traj=tf.tile(traj,[reps,1,1])
+      dcw=tf.tile(dcw,[reps,1])
       
-      traj = tfmr.flatten_trajectory(traj)
       if roll>0:
         shift=rg.uniform(shape=(), minval=0, maxval=tf.shape(traj)[0], dtype=tf.int32)
         traj=tf.roll(traj,shift=shift,axis=0)
@@ -60,18 +69,15 @@ def preprocessing_fn(base_resolution=128,
                           fft_direction='forward')/tf.sqrt(npixel)
 
       # Apply density compensation.
-      dcw = tfmr.flatten_density(dcw)[:phases,...]
       uskspace *= tf.cast(tf.expand_dims(dcw, axis=-2), tf.complex64)
       #Apply coil compression
       if input_format is not None and input_format=='coil_compressed':
-        Coil_compressor = tfmr.coils.CoilCompressorSVD(coil_axis=-3,out_coils=10)
-        #print(uskspace.shape,kspace.shape)
+        Coil_compressor = tfmr.coils.CoilCompressorSVD(coil_axis=-3,out_coils=input_coils)
         Coil_compressor.fit(tf.expand_dims(uskspace[:,...],axis=-1))
         kspace=Coil_compressor.transform(kspace)
         uskspace=Coil_compressor.transform(tf.expand_dims(uskspace,axis=-1))[...,0]
       # Make fully sampled multicoil image from coil compressed Data
       image = make_fs_rtcine_image(kspace, image_shape, roll=roll, phases=phases,keep_external_signal=False)
-      #print(image.shape,kspace.shape)
 
       # Combine coils and normalize ground truth images.
       ccimage = tfmr.coils.combine_coils(image, coil_axis=-3) 
@@ -81,14 +87,14 @@ def preprocessing_fn(base_resolution=128,
 
       # Convert back to image space to get zero-filled image.
       zfill = tfft.nufft(uskspace, tf.expand_dims(traj, axis=-3),
-                        grid_shape=image_shape,
+                        # grid_shape = image_shape,
+                        grid_shape=image_shape, #[sh//2 for sh in image_shape], # ONLY FOR SUPERRES
                         transform_type='type_1',
                         fft_direction='backward')/tf.sqrt(npixel)
 
       # Combine coils and normalize ground truth images.
       image = tfmr.coils.combine_coils(image, coil_axis=-3) 
       # Combine coils and normalize zero-filled image.
-      #zfill = tfmr.coils.combine_coils(zfill , coil_axis=-3) 
       if normalize_input:
         zfill = tfmr.scale_by_min_max(zfill)  # range [0, 1]
       
@@ -107,54 +113,54 @@ def preprocessing_fn(base_resolution=128,
       elif output_format is not None and output_format=='abspre':
         image=tf.math.abs(image)
       else:
-        image = tf.concat((tf.math.real(image),tf.math.imag(image)), axis=-1)
+        image = tf.concat((tf.expand_dims(tf.math.real(image),axis=-1),tf.expand_dims(tf.math.imag(image),axis=-1)), axis=-1)
     if return_kspace:
       zfill={'zfill':zfill,'kspace':uskspace,'traj':traj,'dcw':dcw}
     return zfill, image  # input (height, width, time, channels=coils*2), output (height, width, time, channels=1 or 2 (mag or cpx))
-  
-  def make_fs_rtcine_image(kspace, image_shape, roll=0,phases=20,  keep_external_signal=False):
-    """Returns a fully sampled image from k-space."""
-    kspace=tf.ensure_shape(kspace,(None,) * 4)
-    # Crop to fixed size and normalize pixel intensities (in image space).
-    image = tfmr.signal.ifft(kspace, axes=[-2, -1], norm='ortho', shift=True)
-    if not keep_external_signal:
-      image = tfmr.resize_with_crop_or_pad(image, image_shape)
-
-    # Select random starting point.
-    input_phases = tf.shape(image)[-4]
-    if roll>0:
-      random_shift = rg.uniform(
-          (), minval=0, maxval=input_phases, dtype=tf.int32)
-      image = tf.roll(image, shift=random_shift, axis=-4)
-
-    # Pad up to specified number of phases.
-    _cond = lambda x: tf.math.less(tf.shape(x)[-4], phases)
-    _body = lambda x: [tf.concat([x, x], axis=-4)]
-    image = tf.while_loop(_cond, _body, [image],shape_invariants=[tf.TensorShape([None, None,None,None])])[0]
-    image = image[:phases, ...]
-
-    # `image` is now a fully-sampled multicoil multi-phase image.
-    image = tfmr.resize_with_crop_or_pad(image, image_shape)
-    return image
-
-  def gaussian_blur(img, kernel_size=11, sigma=0.5):
-    def gauss_kernel(channels, kernel_size, sigma):
-        ax = tf.range(-kernel_size // 2 + 1.0, kernel_size // 2 + 1.0)
-        xx, yy = tf.meshgrid(ax, ax)
-        kernel = tf.exp(-(xx ** 2 + yy ** 2) / (2.0 * sigma ** 2))
-        kernel = kernel / tf.reduce_sum(kernel)
-        kernel = tf.tile(kernel[..., tf.newaxis], [1, 1, channels])
-        return kernel
-
-    gaussian_kernel = gauss_kernel(tf.shape(tf.expand_dims(img,axis=-1))[-1], kernel_size, sigma)
-    gaussian_kernel = gaussian_kernel[..., tf.newaxis]
-    outimage=tf.nn.depthwise_conv2d(tf.expand_dims(img,axis=-1), gaussian_kernel, [1, 1, 1, 1],
-                                  padding='SAME', data_format='NHWC')
-    return outimage[...,0]
-
   return _preprocessing_fn
+  
+def make_fs_rtcine_image(kspace, image_shape, roll=0,phases=20,  keep_external_signal=False):
+  """Returns a fully sampled image from k-space."""
+  kspace=tf.ensure_shape(kspace,(None,) * 4)
+  # Crop to fixed size and normalize pixel intensities (in image space).
+  image = tfmr.signal.ifft(kspace, axes=[-2, -1], norm='ortho', shift=True)
+  if not keep_external_signal:
+    image = tfmr.resize_with_crop_or_pad(image, image_shape)
 
-def rolling_fn(phases=24,roll=1,rotation=0,input_format= None):
+  # Select random starting point.
+  input_phases = tf.shape(image)[-4]
+  if roll>0:
+    random_shift = rg.uniform(
+        (), minval=0, maxval=input_phases, dtype=tf.int32)
+    image = tf.roll(image, shift=random_shift, axis=-4)
+
+  # Pad up to specified number of phases.
+  _cond = lambda x: tf.math.less(tf.shape(x)[-4], phases)
+  _body = lambda x: [tf.concat([x, x], axis=-4)]
+  image = tf.while_loop(_cond, _body, [image],shape_invariants=[tf.TensorShape([None, None,None,None])])[0]
+  image = image[:phases, ...]
+
+  # `image` is now a fully-sampled multicoil multi-phase image.
+  image = tfmr.resize_with_crop_or_pad(image, image_shape)
+  return image
+
+def gaussian_blur(img, kernel_size=11, sigma=0.5):
+  def gauss_kernel(channels, kernel_size, sigma):
+      ax = tf.range(-kernel_size // 2 + 1.0, kernel_size // 2 + 1.0)
+      xx, yy = tf.meshgrid(ax, ax)
+      kernel = tf.exp(-(xx ** 2 + yy ** 2) / (2.0 * sigma ** 2))
+      kernel = kernel / tf.reduce_sum(kernel)
+      kernel = tf.tile(kernel[..., tf.newaxis], [1, 1, channels])
+      return kernel
+
+  gaussian_kernel = gauss_kernel(tf.shape(tf.expand_dims(img,axis=-1))[-1], kernel_size, sigma)
+  gaussian_kernel = gaussian_kernel[..., tf.newaxis]
+  outimage=tf.nn.depthwise_conv2d(tf.expand_dims(img,axis=-1), gaussian_kernel, [1, 1, 1, 1],
+                                padding='SAME', data_format='NHWC')
+  return outimage[...,0]
+
+
+def rolling_fn(phases=24,roll=1,rotation=0,input_format=None,output_format=None):
   """Returns a preprocessing function for training."""
   
   def _preprocessing_fn(zfill,image):
@@ -170,8 +176,16 @@ def rolling_fn(phases=24,roll=1,rotation=0,input_format= None):
     
     if tf.rank(zfill)==3:
       zfill=tf.expand_dims(zfill,axis=-1)
+    
+    # if input_format is not None and output_format=='abs':
     zfill=tf.transpose(zfill,perm=[2,0,1,3])
-    image=tf.transpose(tf.expand_dims(image,axis=-1),perm=[2,0,1,3])
+    # else:
+    #   zfill=tf.transpose(zfill,perm=[2,0,1,3,4])
+
+    if output_format is not None and output_format=='abs':
+      image=tf.transpose(tf.expand_dims(image,axis=-1),perm=[2,0,1,3])
+    else:
+      image=tf.transpose(image,perm=[2,0,1,3])
     
     if rotation>0:
       rot_im=rg.uniform(shape=(), minval=0, maxval=4, dtype=tf.int32)

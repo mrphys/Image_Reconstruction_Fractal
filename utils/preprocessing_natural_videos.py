@@ -1,3 +1,13 @@
+"""
+Code to preprocess a multichannel video into a fully-sampled MR-like image
+
+Methods details in : 
+Investigating the use of high spatio-temporal resolution publicly available natural videos to learn Dynamic MR image reconstruction
+
+@author: Dr. Olivier Jaubert
+"""
+
+
 import tensorflow as tf
 import tensorflow_mri as tfmri
 import tensorflow_addons as tfa
@@ -50,6 +60,7 @@ def preprocessing_fn(base_resolution=128,num_coils=10, masking=False, return_gt=
       image_series=image_adjustment[0]+image_adjustment[1]*image_series
       image_series=tf.clip_by_value(image_series, 0, 1)
       #Take 2 random RGB channels and scale relative phase between the two to create complex image
+  
       if complex_transform>0:
           shift_cha=rg.uniform(shape=(), minval=0, maxval=tf.shape(image_series)[-1], dtype=tf.int32)
           image_series=tf.roll(image_series,shift=shift_cha,axis=-1)
@@ -59,12 +70,16 @@ def preprocessing_fn(base_resolution=128,num_coils=10, masking=False, return_gt=
       else:
           image_series=tf.math.sqrt(tf.reduce_sum(tf.cast(image_series,tf.float32)**2,axis=-1))
           image_series=tf.cast(image_series,tf.complex64)
+    
       #apply elliptical masking
+
       if masking:
           mask_shape=[base_resolution,base_resolution]
           mask=tf.py_function(elliptical_mask, inp=[mask_shape],Tout=tf.uint8)
           mask.set_shape(mask_shape)
           image_series=image_series*tf.expand_dims(tf.cast(mask,image_series.dtype)+10**-8,axis=0)
+        
+
 
       # Simulate coil sensitivity maps
       smaps=simulate_coils(base_resolution,sigma_coil,num_coils,coil_size=base_resolution*2,add_phase=add_phase,ngrid=2)
@@ -74,11 +89,13 @@ def preprocessing_fn(base_resolution=128,num_coils=10, masking=False, return_gt=
       #Add background phase to the object
       if add_phase>0:
           image_series=_backgroundphase(image_series)
+
       
       #Create Coil Images from object and sensitivity maps
       coil_images=tf.expand_dims(smaps,axis=1)*tf.expand_dims(image_series,axis=0)
       sos_image=tf.abs(tf.sqrt(tf.reduce_sum(coil_images*tf.math.conj(coil_images),axis=0)))
       coil_images=coil_images/tf.cast(tf.reduce_max(sos_image),tf.complex64)
+      
       
       #Add independant white gaussian noise to each coil image.
       if len(regsnr)==2:
@@ -86,9 +103,11 @@ def preprocessing_fn(base_resolution=128,num_coils=10, masking=False, return_gt=
       else:
             tempregsnr=regsnr[0]
       if tempregsnr>0:
-        coil_images=_awgn(coil_images,tempregsnr,cpx=True)
+        coil_images=_awgn(coil_images,tempregsnr,cpx=True) 
+
       #Create ground truth kspace and sos ground truth image
       #sos_image=sos_image/tf.reduce_max(sos_image)
+      # np.save('resources/julia_radial_sorted/coil_image', coil_images)
       kspace=tfmri.signal.fft(coil_images, axes=[-2, -1], norm='ortho', shift=True)
       kspace=tf.cast(kspace,tf.complex64)
       kspace=tf.transpose(kspace,[1,0,2,3])

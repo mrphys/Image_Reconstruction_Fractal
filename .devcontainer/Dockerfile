@@ -65,3 +65,6 @@ RUN pip install tensorflow-datasets tensorflow-addons tensorboard tensorflow_mri
 # Install additional packages.
 RUN pip install ffmpeg-python scipy scikit-learn scikit-image ipykernel google-api-python-client pydicom jupyter opencv-python gdown numba ipykernel
 
+# synthmr pipeline: HDF5 output, YAML configs, tests.
+RUN pip install h5py pyyaml pytest pyflakes
+

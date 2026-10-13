@@ -1,0 +1,7 @@
+{
+  "_comment": "Measured on the unmodified legacy code over 6 GPU runs (Phase 1 + 2a). Every stage is bit-exact run to run except those combined with tfmri Walsh coil maps, whose eigenvector phase is unanchored: worst observed |mag diff| 1.7e-5, worst sign-invariant complex diff 7.6e-3 (signal max ~1). Thresholds ~5x / ~2.5x the worst observed. Never loosen these to make a refactor pass; upstream stages must stay exact.",
+  "stages": {
+    "zfill": {"mode": "coilmap_phase", "mag_atol": 1e-4, "atol": 2e-2},
+    "zfill_rolled": {"mode": "coilmap_phase", "mag_atol": 1e-4, "atol": 2e-2}
+  }
+}

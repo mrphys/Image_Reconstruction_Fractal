@@ -8,7 +8,7 @@ Paths are relative to `legacy/` (frozen copies of the base repo `utils/` and of 
 | `train_network.ipynb` dataset loop (base repo) | preset `fractal_2dt_legacy` + `Pipeline` (notebook updated) | golden fixture A |
 | `app/process_data_old.py::process_fractals_new_grasp` | preset `fractal_new_2dt` / `scripts/make_dataset.py` | golden fixture B_cc |
 | `app/process_data_old.py::process_fractals_new_grasp_grouped` | preset `fractal_new_2dt_nocc`; grouping superseded by `fractal_3dt_sos` | per-group re-seeding = `pipeline.rng.reset(transforms=s, augment=s)`; it also deleted inputs (not reproduced) |
-| `app/julia_generator_new_grasp.py` | `scripts/generate_fractals.py --mode recipe_2dt` (`synthmr/phantoms/generate.py`) | `--mode recipe_3dt` writes whole `(T, Z, H, W)` volumes |
+| `app/julia_generator_new_grasp.py` | `scripts/generate_fractals.py --mode 2dt` (`synthmr/phantoms/generate.py`) | `--mode 3dt` writes whole `(T, Z, H, W)` volumes |
 | other `process_*` (real MRI, Inter4k, superres, VarNet, spiral prospective) | not ported (stay in `legacy/app/process_data_old.py`) | out of scope by decision |
 
 ## Fractals

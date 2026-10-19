@@ -29,9 +29,9 @@ def test_config_roundtrip_and_overrides(tmp_path):
     cfg = get_preset("fractal_new_2dt")
     assert PipelineConfig.from_dict(cfg.to_dict()) == cfg
     f = tmp_path / "o.yaml"
-    f.write_text("simulation:\n  num_coils: [12]\ntrajectory:\n  radial_spokes: 21\n")
+    f.write_text("simulation:\n  num_coils: [12]\ntrajectory:\n  spokes: 21\n")
     c2 = load_config("fractal_new_2dt", path=f)
-    assert c2.simulation.num_coils == (12,) and c2.trajectory.radial_spokes == 21
+    assert c2.simulation.num_coils == (12,) and c2.trajectory.spokes == 21
     assert c2.recon == cfg.recon
     with pytest.raises(KeyError):
         cfg.updated({"simulation": {"bogus": 1}})

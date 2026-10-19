@@ -5,7 +5,7 @@ No golden exists for 3D+t (behaviour intentionally differs from the per-slice le
 
 import numpy as np
 
-from synthmr.phantoms.generate import RecipeDomain, default_candidates
+from synthmr.phantoms.generate import FractalDomain, default_candidates
 from synthmr.phantoms.recipes import random_recipe, render_recipe
 from synthmr.pipeline import Pipeline, get_preset, load_sample, save_sample
 from synthmr.viz.gifs import save_ortho_gif, save_panel_gif, save_slice_mosaic_gif
@@ -17,7 +17,7 @@ def test_fractal_3dt_sos_end_to_end(golden_np_dir, artifacts_dir, tmp_path):
     r = np.random.default_rng(fx.B_RECIPE_SEED)
     cands = default_candidates()
     recipe = random_recipe(r, cands[r.choice(len(cands))])           # same recipe as fixture B
-    volume = render_recipe(recipe, RecipeDomain(slices=10).grid(), max_iter=30, norm_axes=None)
+    volume = render_recipe(recipe, FractalDomain(slices=10).grid(), max_iter=30, norm_axes=None)
     assert volume.shape == (32, 10, 256, 256)
 
     cfg = get_preset("fractal_3dt_sos")

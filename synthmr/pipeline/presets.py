@@ -1,7 +1,7 @@
 """Named pipeline presets. The 2D presets reproduce the legacy entry points exactly."""
 
 from synthmr.recon import AugmentConfig, ReconConfig
-from synthmr.sampling import TrajectoryConfig
+from synthmr.sampling import RadialTrajectoryConfig
 from synthmr.simulation import SimulationConfig
 
 from .config import InputConfig, OutputConfig, PipelineConfig
@@ -13,7 +13,7 @@ def fractal_2dt_legacy():
         name="fractal_2dt_legacy",
         input=InputConfig(complexify="sine_wave", legacy_global_np=True),
         simulation=SimulationConfig(num_coils=(15,), complex_transform=1),
-        trajectory=TrajectoryConfig(radial_spokes=13, base_resolution=256, phases=32, ordering="sorted_half"),
+        trajectory=RadialTrajectoryConfig(spokes=13, base_resolution=256, phases=32, ordering="sorted_half"),
         recon=ReconConfig(input_format="coil_compressed", input_coils=10, output_format="abs"),
         augment=AugmentConfig(phases=24, roll=1, rotation=1),
     )
@@ -25,7 +25,7 @@ def fractal_new_2dt():
         name="fractal_new_2dt",
         input=InputConfig(complexify="complex_to_video"),
         simulation=SimulationConfig(num_coils=(10,), complex_transform=1),
-        trajectory=TrajectoryConfig(radial_spokes=13, base_resolution=256, phases=32, ordering="golden_half"),
+        trajectory=RadialTrajectoryConfig(spokes=13, base_resolution=256, phases=32, ordering="golden_half"),
         recon=ReconConfig(input_format="coil_compressed", input_coils=10, output_format="abs"),
         augment=AugmentConfig(phases=24, roll=1, rotation=1),
     )
@@ -51,8 +51,8 @@ def fractal_3dt_sos():
         input=InputConfig(complexify="complex_to_video"),
         simulation=SimulationConfig(mode="3d", slices=10, slice_spacing_px=10.0, num_coils=(10,),
                                     complex_transform=1),
-        trajectory=TrajectoryConfig(radial_spokes=13, base_resolution=256, phases=32, ordering="golden_half",
-                                    through_plane="cartesian_kz", kz_rotation="aligned"),
+        trajectory=RadialTrajectoryConfig(spokes=13, base_resolution=256, phases=32, ordering="golden_half",
+                                          through_plane="cartesian_kz", kz_rotation="aligned"),
         recon=ReconConfig(input_format="complex", output_format="abs", coil_maps="time_avg_tukey_3d",
                           tukey_width=(1.0, 0.25, 0.25), tukey_alpha=0.5, anchor_phase=True),
         augment=AugmentConfig(phases=24, roll=1, rotation=1, z_flip=0),

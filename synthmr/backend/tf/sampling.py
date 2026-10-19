@@ -101,7 +101,7 @@ def gen_spiral_traj(
 
 def radial(cfg):
     """Radial trajectory ``(phases, spokes*readout, 2)`` and dcw ``(phases, spokes*readout)``."""
-    traj = tfmri.sampling.radial_trajectory(base_resolution=cfg.base_resolution, views=cfg.radial_spokes,
+    traj = tfmri.sampling.radial_trajectory(base_resolution=cfg.base_resolution, views=cfg.spokes,
                                             phases=cfg.phases, ordering=cfg.ordering)
     traj = tfmri.sampling.flatten_trajectory(traj)
     dens = tfmri.sampling.estimate_radial_density(traj)
@@ -110,7 +110,7 @@ def radial(cfg):
 
 def spiral(cfg):
     """Variable-density spiral, searching the arm count to satisfy ``min_max_arm_time`` (legacy)."""
-    p = cfg.spiral
+    p = cfg.waveform_params()
     min_max_arm_time = p["min_max_arm_time"]
     max_guesses, counter, time_for_an_arm = 50, 0, 0
     vd_spiral_arms0 = p["vd_spiral_arms"]
@@ -128,7 +128,7 @@ def spiral(cfg):
 
 
 def make_trajectory(cfg):
-    """``(traj, dcw)`` for a :class:`synthmr.sampling.TrajectoryConfig` (in-plane part)."""
+    """``(traj, dcw)`` for a :class:`synthmr.sampling.TrajectoryConfig` subclass (in-plane part)."""
     if cfg.kind == "radial":
         traj, dcw = radial(cfg)
     elif cfg.kind == "spiral":

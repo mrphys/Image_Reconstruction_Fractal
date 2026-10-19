@@ -16,6 +16,7 @@ from synthmr.simulation import simulate
 @dataclass
 class Sample:
     input: np.ndarray                 # 2D+t: (T, H, W, ch); 3D+t: (T, Z, H, W, ch)
+                                      # ch = 2 (re, im) or 1 (abs); uncombined: 2C [re_1..re_C, im_1..im_C] or C
     target: np.ndarray                # same leading dims, ch = 1 (abs) or 2 (complex)
     meta: dict = field(default_factory=dict)
     stages: Optional[dict] = None     # intermediate arrays when run(..., return_stages=True)
@@ -68,4 +69,5 @@ class Pipeline:
                       **{f"sim_{k}": B.to_numpy(v) for k, v in sim.items() if v is not None},
                       **{k: B.to_numpy(v) for k, v in rec.items() if v is not None}}
         return Sample(input=B.to_numpy(zfill), target=B.to_numpy(image),
-                      meta={"preset": cfg.name, "seeds": self.rng.seeds()}, stages=stages)
+                      meta={"preset": cfg.name, "seeds": self.rng.seeds(), "input_format": cfg.recon.input_format,
+                            "input_combine": cfg.recon.input_combine}, stages=stages)

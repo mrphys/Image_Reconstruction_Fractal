@@ -13,6 +13,7 @@
 | `*_input.npy` (zfill) | `(T, H, W, 2)` float32 | Walsh-combined, real/imag; after roll/rotation, 24 frames |
 | `*_output.npy` (target) | `(T, H, W, 1)` float32 | magnitude (`output_format='abs'`) |
 | 3D+t (new) | `(T, Z, H, W, ch)` in h5 `input`/`output` | + meta.json |
+| uncombined input (`recon.input_combine='none'`) | `(T, H, W, 2C)` / `(T, Z, H, W, 2C)` | `[re_1..re_C, im_1..im_C]`; `C` channels if `input_format='abs'` |
 
 ## 3D+t specifics
 - Slices are 2D planes stacked along Z. `SimulationConfig.slice_spacing_px` gives the slice spacing in in-plane

@@ -40,7 +40,8 @@ def gaussian_blur(img, kernel_size=11, sigma=0.5):
 
 
 def format_pair(zfill, image, cfg):
-    """Legacy output formats: zfill ``(..., 1)`` complex -> abs or real/imag channels; target abs or 2 channels."""
+    """Legacy output formats: zfill ``(..., C)`` complex -> abs or ``[re_1..re_C, im_1..im_C]`` channels;
+    target abs or 2 channels. C = 1 for a coil-combined zfill."""
     if cfg.input_format == 'abs':
         zfill = tf.math.abs(zfill)
     else:
@@ -82,7 +83,10 @@ def reconstruct_2d(kspace, traj, dcw, cfg):
     if cfg.coil_maps != "walsh_xyt_legacy":
         raise ValueError(f"2D path supports coil_maps='walsh_xyt_legacy', got {cfg.coil_maps!r}")
     maps = tfmr.coils.estimate_sensitivities(zfill, method='walsh')      # time acts as a 3rd spatial axis
-    zfill = tfmr.coils.combine_coils(zfill, maps=maps, coil_axis=-1, keepdims=True)   # (H, W, T, 1)
+    if cfg.input_combine == "maps":
+        zfill = tfmr.coils.combine_coils(zfill, maps=maps, coil_axis=-1, keepdims=True)   # (H, W, T, 1)
+    elif cfg.input_combine != "none":
+        raise ValueError(f"unknown input_combine {cfg.input_combine!r}; use 'maps' or 'none'")
     if cfg.gfilt is not None:
         image = tf.expand_dims(tf.complex(gaussian_blur(tf.math.real(image[0, ...]), sigma=cfg.gfilt),
                                           gaussian_blur(tf.math.imag(image[0, ...]), sigma=cfg.gfilt)), axis=0)

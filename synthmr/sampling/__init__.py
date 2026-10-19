@@ -2,43 +2,89 @@
 
 A trajectory is an in-plane encoder (``radial`` | ``spiral``) combined with a
 through-plane encoder (``none`` for 2D, ``cartesian_kz`` for stack-of-stars /
-stack-of-spirals). New encoders: see .claude/skills/add-trajectory.
+stack-of-spirals). Each in-plane encoder has its own config class (``TRAJECTORY_KINDS``).
+New encoders: see .claude/skills/add-trajectory.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 
 from synthmr.backend import get_backend
 
 
-def _spiral_defaults():
-    return dict(tiny_number=7, max_tempres=50, min_max_arm_time=[3, 8], vd_spiral_arms=26,
-                vd_inner_cutoff=0.2, pre_vd_outer_cutoff=0.5, vd_outer_density=0.25, vd_type='linear',
-                max_grad_ampl=24.0, min_rise_time=8.125, dwell_time=1.4, gradient_delay=0.56,
-                readoutOS=2, deadtime=1.9, larmor_const=42.577478518, flow=0)
-
-
 @dataclass
 class TrajectoryConfig:
-    kind: str = "radial"                 # in-plane encoder: radial | spiral
-    radial_spokes: int = 13
+    """Fields shared by every in-plane encoder. Build a subclass (see ``TRAJECTORY_KINDS``)."""
+
+    kind: str = field(init=False, default="")   # fixed by the subclass
     base_resolution: int = 256
-    field_of_view: float = 400
     phases: int = 32
     ordering: str = "tiny_half"
     reverse: bool = True
-    spiral: dict = field(default_factory=_spiral_defaults)
     through_plane: str = "none"          # none | cartesian_kz
     kz_rotation: str = "aligned"         # aligned | golden (per-partition angular offset)
+
+    @staticmethod
+    def from_dict(d):
+        """Build the subclass named by ``d["kind"]`` (default ``radial``)."""
+        d = dict(d)
+        kind = d.pop("kind", "radial")
+        if kind not in TRAJECTORY_KINDS:
+            raise ValueError(f"unknown trajectory kind {kind!r}; available: {sorted(TRAJECTORY_KINDS)}")
+        cls = TRAJECTORY_KINDS[kind]
+        unknown = set(d) - {f.name for f in fields(cls) if f.init}
+        if unknown:
+            raise KeyError(f"{cls.__name__}: unknown keys {sorted(unknown)}")
+        return cls(**d)
+
+    @staticmethod
+    def common_fields():
+        """Names of the fields every kind shares (kept when an override switches ``kind``)."""
+        return [f.name for f in fields(TrajectoryConfig)]
+
+
+@dataclass
+class RadialTrajectoryConfig(TrajectoryConfig):
+    kind: str = field(init=False, default="radial")
+    spokes: int = 13
 
     @classmethod
     def from_legacy(cls, d):
         """From a legacy ``config_radial_traj()`` dict (radial only)."""
         d = dict(d)
         if d.get("radial_spokes", 0) <= 0:
-            raise ValueError("legacy spiral configs: build TrajectoryConfig(kind='spiral', spiral=...) directly")
-        return cls(kind="radial", **{k: d[k] for k in
-                                     ("radial_spokes", "base_resolution", "field_of_view", "phases",
-                                      "ordering", "reverse") if k in d})
+            raise ValueError("legacy spiral configs: build SpiralTrajectoryConfig(...) directly")
+        kwargs = {k: d[k] for k in ("base_resolution", "phases", "ordering", "reverse") if k in d}
+        return cls(spokes=d["radial_spokes"], **kwargs)
+
+
+@dataclass
+class SpiralTrajectoryConfig(TrajectoryConfig):
+    kind: str = field(init=False, default="spiral")
+    field_of_view: float = 400
+    tiny_number: int = 7
+    max_tempres: int = 50
+    min_max_arm_time: list = field(default_factory=lambda: [3, 8])
+    vd_spiral_arms: int = 26
+    vd_inner_cutoff: float = 0.2
+    pre_vd_outer_cutoff: float = 0.5
+    vd_outer_density: float = 0.25
+    vd_type: str = "linear"
+    max_grad_ampl: float = 24.0
+    min_rise_time: float = 8.125
+    dwell_time: float = 1.4
+    gradient_delay: float = 0.56
+    readoutOS: int = 2
+    deadtime: float = 1.9
+    larmor_const: float = 42.577478518
+    flow: int = 0
+
+    def waveform_params(self):
+        """Spiral design parameters (everything not shared with other kinds, minus ``field_of_view``)."""
+        common = set(TrajectoryConfig.common_fields()) | {"field_of_view"}
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in common}
+
+
+TRAJECTORY_KINDS = {"radial": RadialTrajectoryConfig, "spiral": SpiralTrajectoryConfig}
 
 
 def make_trajectory(config, backend=None):
@@ -46,4 +92,5 @@ def make_trajectory(config, backend=None):
     return (backend or get_backend()).sampling.make_trajectory(config)
 
 
-__all__ = ["TrajectoryConfig", "make_trajectory"]
+__all__ = ["TrajectoryConfig", "RadialTrajectoryConfig", "SpiralTrajectoryConfig", "TRAJECTORY_KINDS",
+           "make_trajectory"]

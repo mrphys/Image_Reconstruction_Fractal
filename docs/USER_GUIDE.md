@@ -65,9 +65,9 @@ python scripts/generate_fractals.py --mode MODE --n N --out DIR [options]
 
 | `--mode` | Output per fractal | dtype / range | Use with preset |
 |---|---|---|---|
-| `escape` | `(T, H, W)` integer escape-time volume. Fractals that fail an entropy-based complexity check (threshold 1.7) are rejected and redrawn. This is the original paper method. | int32 | `fractal_2dt_legacy` |
-| `recipe_2dt` | One `(T, H, W)` file per slice: `--slices` files per fractal, each a different y-position through the same 4D fractal | complex128 in [-1, 1] | `fractal_new_2dt`, `fractal_new_2dt_nocc` |
-| `recipe_3dt` | One `(T, Z, H, W)` volume per fractal | complex128 in [-1, 1] | `fractal_3dt_sos` |
+| `legacy` | `(T, H, W)` integer escape-time volume. Fractals that fail an entropy-based complexity check (threshold 1.7) are rejected and redrawn. This is the original paper method. | int32 | `fractal_2dt_legacy` |
+| `2dt` | One `(T, H, W)` file per slice: `--slices` files per fractal, each a different y-position through the same 4D fractal | complex128 in [-1, 1] | `fractal_new_2dt`, `fractal_new_2dt_nocc` |
+| `3dt` | One `(T, Z, H, W)` volume per fractal | complex128 in [-1, 1] | `fractal_3dt_sos` |
 
 In the **recipe** modes, each fractal gets a random *recipe*. A recipe is a Julia parameter `c` plus, for
 the real part and for the imaginary part separately, a weighted mix of 1–2 randomly chosen fields (see
@@ -77,8 +77,8 @@ the real part and for the imaginary part separately, a weighted mix of 1–2 ran
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--mode` | *(required)* | `escape`, `recipe_2dt` or `recipe_3dt` |
-| `--n` | *(required)* | Number of fractals to generate. In `recipe_2dt` each fractal writes `--slices` files. |
+| `--mode` | *(required)* | `legacy`, `2dt` or `3dt` |
+| `--n` | *(required)* | Number of fractals to generate. In `2dt` each fractal writes `--slices` files. |
 | `--out` | *(required)* | Output directory (created if missing) |
 | `--seed` | `0` | Seed for the numpy generator that picks `c` values and recipes. The same seed gives the same fractals. |
 | `--size H W` | `256 256` | In-plane grid size |
@@ -92,19 +92,19 @@ the real part and for the imaginary part separately, a weighted mix of 1–2 ran
 
 | Mode | Files |
 |---|---|
-| `escape` | `<c0>_<c1>_<c2>_<c3>_<NNNN>.npy` (named after the Julia `c`) + `.json` |
-| `recipe_2dt` | `julia_<KK>_slice_<S>.npy` + `.json` (S = 1…Z) |
-| `recipe_3dt` | `julia_<KKK>.npy` + `.json` |
+| `legacy` | `<c0>_<c1>_<c2>_<c3>_<NNNN>.npy` (named after the Julia `c`) + `.json` |
+| `2dt` | `julia_<KK>_slice_<S>.npy` + `.json` (S = 1…Z) |
+| `3dt` | `julia_<KKK>.npy` + `.json` |
 | GIFs | `<name>.gif` for 3D arrays; `<name>.mosaic.gif` (all slices tiled) and `<name>.ortho.gif` (three orthogonal views) for 4D volumes |
 
 The JSON holds the mode, the domain (grid bounds), the normalisation and the recipe or `c` value.
 
-> `escape` mode stops after `n × 100` attempts, so if most candidates fail the complexity check it can
+> `legacy` mode stops after `n × 100` attempts, so if most candidates fail the complexity check it can
 > write fewer than `n` files. The script prints how many it wrote.
 
 ### The sampling domain
 
-The recipe modes sample 4D quaternion space `(w, x, y, z)` as follows (`RecipeDomain` in
+The `2dt` and `3dt` modes sample 4D quaternion space `(w, x, y, z)` as follows (`FractalDomain` in
 `synthmr/phantoms/generate.py`):
 
 | Array axis | Quaternion component | Range |
@@ -115,7 +115,7 @@ The recipe modes sample 4D quaternion space `(w, x, y, z)` as follows (`RecipeDo
 | slices (Z) | y | centred on 0, step 0.1 |
 
 The bounds, time range and slice step are not CLI options. To change them, call `generate()` from Python
-with your own `RecipeDomain` (see [§9](#9-working-with-fractals-directly)).
+with your own `FractalDomain` (see [§9](#9-working-with-fractals-directly)).
 
 ## 4. Step 2: making a dataset
 
@@ -156,7 +156,7 @@ simulation:
   num_coils: [8, 16]        # random number of coils per sample, 8..16
   regsnr: [15, 30]          # SNR between 15 and 30 dB
 trajectory:
-  radial_spokes: 21
+  spokes: 21
 augment:
   z_flip: 1
 seeds:
@@ -178,10 +178,10 @@ that file back to `--config` later to rebuild the same dataset.
 
 | Preset | Input volumes | Pipeline | Output |
 |---|---|---|---|
-| `fractal_2dt_legacy` | `escape` | Sine-wave complexify (paper method), 15 coils, 13 radial spokes/frame (`sorted_half`), SVD compression to 10 coils | `.npy`, input `(24,256,256,2)`, target `(24,256,256,1)` |
-| `fractal_new_2dt` | `recipe_2dt` | Complex recipe fractal, 10 coils, 13 golden-angle spokes/frame (`golden_half`), compression to 10 coils | `.npy`, same shapes |
-| `fractal_new_2dt_nocc` | `recipe_2dt` | As `fractal_new_2dt` but **without** coil compression | `.npy`, same shapes |
-| `fractal_3dt_sos` | `recipe_3dt` | Volume-consistent 3D simulation (10 slices, spacing 10 px), 10 coils, stack-of-stars (13 golden spokes per kz partition, Cartesian kz), no compression, 3D coil maps from time-averaged Tukey-filtered data | `.h5`, input `(24,10,256,256,2)`, target `(24,10,256,256,1)` |
+| `fractal_2dt_legacy` | `legacy` | Sine-wave complexify (paper method), 15 coils, 13 radial spokes/frame (`sorted_half`), SVD compression to 10 coils | `.npy`, input `(24,256,256,2)`, target `(24,256,256,1)` |
+| `fractal_new_2dt` | `2dt` | Complex recipe fractal, 10 coils, 13 golden-angle spokes/frame (`golden_half`), compression to 10 coils | `.npy`, same shapes |
+| `fractal_new_2dt_nocc` | `2dt` | As `fractal_new_2dt` but **without** coil compression | `.npy`, same shapes |
+| `fractal_3dt_sos` | `3dt` | Volume-consistent 3D simulation (10 slices, spacing 10 px), 10 coils, stack-of-stars (13 golden spokes per kz partition, Cartesian kz), no compression, 3D coil maps from time-averaged Tukey-filtered data | `.h5`, input `(24,10,256,256,2)`, target `(24,10,256,256,1)` |
 
 The three 2D presets reproduce the original scripts bit for bit (checked by the regression tests).
 `fractal_3dt_sos` is new.
@@ -254,18 +254,34 @@ name  input  simulation  trajectory  recon  augment  output  seeds  device
 
 ### `trajectory`: k-space sampling
 
+Each in-plane encoder has its own config class (`RadialTrajectoryConfig`, `SpiralTrajectoryConfig` in
+`synthmr.sampling`), so a config only holds the params of the encoder it uses. `kind` selects the class.
+Changing `kind` in an override resets the encoder params to that kind's defaults; the shared keys are kept.
+
+Shared keys:
+
 | Key | Default | Meaning |
 |---|---|---|
 | `kind` | `"radial"` | In-plane trajectory: `radial` or `spiral` (spiral: see note) |
-| `radial_spokes` | `13` | Spokes per frame. This sets the acceleration: full radial sampling at 256 needs ~400 spokes, so 13 is very undersampled. |
 | `ordering` | `"tiny_half"` | Spoke angle ordering, passed to `tensorflow_mri.sampling.radial_trajectory`. Common values: `golden_half` (golden angle, half circle), `tiny_half` (tiny golden angle), `sorted_half` (evenly spaced, rotated per frame). Spiral uses e.g. `golden`, `tiny`. |
 | `phases` | `32` | Number of distinct trajectory frames (repeated in time if the recon needs more) |
 | `base_resolution` | `256` | Readout resolution |
 | `reverse` | `true` | Swap the two trajectory coordinates (kept for compatibility with the original code) |
-| `field_of_view` | `400` | Spiral only: FOV in mm |
-| `spiral` | *(see `--print-config`)* | Spiral design parameters: arms, variable-density cutoffs, gradient limits, dwell time, arm-duration window `min_max_arm_time`, … |
 | `through_plane` | `"none"` | `none`: 2D (needs Z = 1). `cartesian_kz`: stack-of-stars. The z-direction is fully sampled by FFT and every kz partition uses the in-plane trajectory. Required for 3D volumes. |
 | `kz_rotation` | `"aligned"` | `cartesian_kz` only. `aligned`: every partition uses the same spokes (classic stack-of-stars). `golden`: partition k is rotated by k × golden angle, which spreads spokes through kz. |
+
+`kind: radial` keys:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `spokes` | `13` | Spokes per frame. This sets the acceleration: full radial sampling at 256 needs ~400 spokes, so 13 is very undersampled. |
+
+`kind: spiral` keys:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `field_of_view` | `400` | FOV in mm |
+| `vd_spiral_arms`, `min_max_arm_time`, `max_tempres`, `vd_*`, `max_grad_ampl`, `min_rise_time`, `dwell_time`, … | *(see `SpiralTrajectoryConfig`)* | Spiral design parameters: arms, variable-density cutoffs, gradient limits, dwell time, arm-duration window, … |
 
 > **Spiral** trajectories (`kind: spiral`) need the `spiral-waveform` library, which the devcontainer
 > installs. The trajectory builder supports them, but the pipeline is only tested end to end with radial
@@ -285,6 +301,7 @@ name  input  simulation  trajectory  recon  augment  output  seeds  device
 | `tukey_width` | `[1.0, 0.25, 0.25]` | 3D | Fraction of k-space kept along (Z, Y, X) for the coil-map low-pass |
 | `tukey_alpha` | `0.5` | 3D | Taper of the Tukey window (0 = box, 1 = Hann) |
 | `anchor_phase` | `true` | 3D | Reference the coil-map phase to coil 0. This makes the input phase reproducible. The 2D path is unanchored, as in the original. |
+| `input_combine` | `"maps"` | both | `maps`: the zero-filled input is coil-combined with the estimated maps (1 complex channel). `none`: coils are kept and folded into the channel axis as `[re_1 … re_C, im_1 … im_C]` (2C channels; C channels for `input_format: abs`). C is `input_coils` with compression, else the simulated coil count. Maps are still estimated and returned in `rec["maps"]`. |
 | `target_combine` | `"sos"` | 3D | `sos`: target is the root-sum-of-squares magnitude. `maps`: target combined with the same coil maps as the input, which keeps its phase (pair with `output_format: null` for a complex target). In 2D the target is always sum-of-squares. |
 | `gfilt` | `null` | 2D | If set, Gaussian-blur sigma applied to the target (legacy option) |
 | `roll` | `0` | | Must stay `0` (temporal rolling is done in `augment`) |
@@ -335,8 +352,10 @@ data/pairs/
 | target | `(T, H, W, 1)` or `(T, H, W, 2)` | `(T, Z, H, W, 1)` or `(…, 2)` |
 | defaults | T = 24, H = W = 256, ch = 2 (real, imag) | T = 24, Z = 10, H = W = 256, ch = 2 |
 
-Channel order is always `[real, imag]` for 2-channel arrays. The input is the **coil-combined zero-filled
-reconstruction**, and the target is the **fully sampled coil-combined image** (magnitude by default).
+Channel order is always `[real, imag]` for 2-channel arrays. By default the input is the **coil-combined
+zero-filled reconstruction**. With `recon.input_combine: none` it keeps the coils instead: ch = 2C, ordered
+`[re_1 … re_C, im_1 … im_C]` (all real parts, then all imaginary parts), or ch = C for `input_format: abs`.
+The target is always the **fully sampled coil-combined image** (magnitude by default).
 
 Loading:
 
@@ -405,7 +424,7 @@ from synthmr.pipeline import register_preset, get_preset
 def my_3dt_fast():
     cfg = get_preset("fractal_3dt_sos")
     cfg.name = "my_3dt_fast"
-    cfg.trajectory.radial_spokes = 34
+    cfg.trajectory.spokes = 34
     cfg.simulation.num_coils = (8,)
     return cfg
 ```
@@ -445,14 +464,14 @@ Everything in `synthmr.phantoms` is numpy/numba and needs no GPU.
 ### Batch generation with a custom domain
 
 ```python
-from synthmr.phantoms.generate import generate, RecipeDomain, EscapeDomain
+from synthmr.phantoms.generate import generate, FractalDomain, LegacyDomain
 
-dom = RecipeDomain(shape=(192, 192), frames=40, slices=16, slice_step=0.05,
-                   time_range=(-0.5, 0.5), bounds=((-1.2, 1.2), (-1.6, 1.6)), max_iter=40)
-paths = generate("recipe_3dt", n=20, out_dir="data/custom", seed=3, domain=dom, norm="volume")
+dom = FractalDomain(shape=(192, 192), frames=40, slices=16, slice_step=0.05,
+                    time_range=(-0.5, 0.5), bounds=((-1.2, 1.2), (-1.6, 1.6)), max_iter=40)
+paths = generate("3dt", n=20, out_dir="data/custom", seed=3, domain=dom, norm="volume")
 ```
 
-`EscapeDomain(shape, extent, time_extent, frames, max_iter, complexity_threshold)` configures the `escape`
+`LegacyDomain(shape, extent, time_extent, frames, max_iter, complexity_threshold)` configures the `legacy`
 mode the same way.
 
 ### Rendering a single fractal
@@ -589,7 +608,7 @@ python -m pytest tests -q -p no:warnings        # ~1 min on GPU
 |---|---|
 | Segfault, or `Eigen decomposition was not successful` during `make_dataset.py` | Running on CPU. The Walsh coil-map estimation needs a GPU with this TF version. |
 | `KeyError: PipelineConfig: unknown keys [...]` (or `SimulationConfig`, …) | Typo or wrong section in an override file or dict |
-| `through_plane='none' needs Z=1; use 'cartesian_kz' for 3D+t` | A `(T, Z, H, W)` volume with a 2D preset. Use `fractal_3dt_sos`, or generate with `recipe_2dt`. |
+| `through_plane='none' needs Z=1; use 'cartesian_kz' for 3D+t` | A `(T, Z, H, W)` volume with a 2D preset. Use `fractal_3dt_sos`, or generate with `2dt`. |
 | `3D path supports coil_maps='time_avg_tukey_3d'` / `2D path supports coil_maps='walsh_xyt_legacy'` | `recon.coil_maps` doesn't match the data's dimensionality |
 | `NotImplementedError: roll>0 in recon ...` | Set `recon.roll: 0`; use `augment.roll` instead |
 | 2D: error while drawing the temporal roll | `augment.roll > 0` needs `recon.phases` greater than `augment.phases` (3D skips the roll instead) |

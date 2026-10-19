@@ -25,6 +25,9 @@ class ReconConfig:
     tukey_width: tuple = (1.0, 0.25, 0.25)           # k-space support kept (fraction) along (Z, Y, X)
     anchor_phase: bool = True                         # 3D maps: reference phase to coil 0 (legacy 2D: unanchored)
     target_combine: str = "sos"                       # sos (magnitude) | maps (complex, same maps as input)
+    # maps: zfill coil-combined with the estimated maps (1 complex channel).
+    # none: coils kept, folded into channels as [re_c1..re_cC, im_c1..im_cC] (abs: C channels).
+    input_combine: str = "maps"
 
     def __post_init__(self):
         self.tukey_width = tuple(self.tukey_width)

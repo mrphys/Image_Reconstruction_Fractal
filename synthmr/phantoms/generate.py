@@ -2,11 +2,11 @@
 
 Modes
 -----
-``escape``      base-repo escape-time volume ``(T, H, W)`` int32, entropy-filtered (paper method;
-                complexified later by the pipeline's ``sine_wave`` step).
-``recipe_2dt``  new framework, complex ``(T, H, W)`` per slice, saved one file per slice
-                (``julia_XX_slice_N.npy``) exactly like the legacy generator.
-``recipe_3dt``  new framework, complex ``(T, Z, H, W)`` volume, one file per fractal.
+``legacy``  base-repo escape-time volume ``(T, H, W)`` int32, entropy-filtered (paper method;
+            complexified later by the pipeline's ``sine_wave`` step).
+``2dt``     new framework, complex ``(T, H, W)`` per slice, saved one file per slice
+            (``julia_XX_slice_N.npy``) exactly like the legacy generator.
+``3dt``     new framework, complex ``(T, Z, H, W)`` volume, one file per fractal.
 """
 
 import json
@@ -22,7 +22,7 @@ from .recipes import random_recipe, render_recipe
 
 
 @dataclass
-class RecipeDomain:
+class FractalDomain:
     """Quaternion domain of the new generator: rows = x (comp 1), cols = w (comp 0),
     time = z sweep (comp 3), slices = y (comp 2) centred on 0 with ``slice_step`` spacing."""
 
@@ -43,7 +43,7 @@ class RecipeDomain:
 
 
 @dataclass
-class EscapeDomain:
+class LegacyDomain:
     """Base-repo grid ``build_grid([1, 1, 0, 0.2], [256, 256, 1, 32])`` as ``(T, Y, X)``."""
 
     shape: Tuple[int, int] = (256, 256)
@@ -60,22 +60,34 @@ class EscapeDomain:
 
 
 def default_candidates():
+    """
+    Default candidates for ``c`` in the quaternion Julia set generation, sampled near the Mandelbrot boundary.
+    """
     return candidate_c(resolution=40, extent=1.5, max_iter=50, min_iter=10, max_escape=30)
 
 
 def generate(mode, n, out_dir, seed=0, domain=None, norm="frame", candidates=None, max_tries=100):
-    """Generate ``n`` phantoms into ``out_dir``; returns the list of written paths.
+    """
+    Generate ``n`` phantoms into ``out_dir``; returns the list of written paths.
 
-    ``norm``: ``frame`` (legacy, per 2-D frame) or ``volume`` (whole block; recommended for 3D+t).
+    Args:
+        mode: str, one of ``legacy``, ``2dt``, ``3dt``. ``legacy`` uses the base-repo escape-time generator, while ``2dt``/``3dt`` use the new recipe-based generator.
+        n: int, number of phantoms to generate.
+        out_dir: str or Path, output directory.
+        seed: int, random seed for reproducibility.
+        domain: FractalDomain or LegacyDomain, optional; if None, defaults are used.
+        norm: str, normalization method; "frame" or "volume".
+        candidates: list of complex numbers for Julia parameter c; if None, defaults are used.
+        max_tries: int, maximum attempts to generate valid escape-time volumes in "legacy" mode.
     """
     rng = np.random.default_rng(seed)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    candidates = default_candidates() if candidates is None else candidates
+    candidates = default_candidates() if candidates is None else candidates # candidates based on mandelbrot
     norm_axes = (-2, -1) if norm == "frame" else None
     written = []
-    if mode == "escape":
-        domain = domain or EscapeDomain()
+    if mode == "legacy":
+        domain = domain or LegacyDomain() # base-repo escape-time domain
         coords = domain.grid().coordinates()
         made, tries = 0, 0
         while made < n and tries < n * max_tries:
@@ -92,19 +104,19 @@ def generate(mode, n, out_dir, seed=0, domain=None, norm="frame", candidates=Non
             made += 1
         return written
 
-    domain = domain or RecipeDomain()
+    domain = domain or FractalDomain()
     grid = domain.grid()
     for k in range(n):
         recipe = random_recipe(rng, candidates[rng.integers(len(candidates))])
         block = render_recipe(recipe, grid, max_iter=domain.max_iter, norm_axes=norm_axes)   # (T, Z, H, W)
         meta = {"mode": mode, "recipe": recipe, "domain": asdict(domain), "norm": norm}
-        if mode == "recipe_2dt":
+        if mode == "2dt":
             for s in range(block.shape[1]):
                 path = out_dir / f"julia_{k:02d}_slice_{s + 1}.npy"
                 np.save(path, block[:, s])
                 _write_meta(path, {**meta, "slice": s})
                 written.append(path)
-        elif mode == "recipe_3dt":
+        elif mode == "3dt":
             path = out_dir / f"julia_{k:03d}.npy"
             np.save(path, block)
             _write_meta(path, meta)

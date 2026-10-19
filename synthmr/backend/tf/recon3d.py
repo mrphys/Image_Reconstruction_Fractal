@@ -60,9 +60,12 @@ def reconstruct_3d(kspace, traj, dcw, cfg, kz_rotation="aligned"):
     """3D+t pair from canonical k-space ``(C, T, Z, H, W)``.
 
     Returns zfill ``(T, Z, H, W, ch)``, image ``(T, Z, H, W)`` (abs) or ``(T, Z, H, W, 2)``.
+    With ``input_combine='none'`` the coils stay in the zfill channels (ch = 2C, or C for abs).
     """
     if cfg.coil_maps != "time_avg_tukey_3d":
         raise ValueError(f"3D path supports coil_maps='time_avg_tukey_3d', got {cfg.coil_maps!r}")
+    if cfg.input_combine not in ("maps", "none"):
+        raise ValueError(f"unknown input_combine {cfg.input_combine!r}; use 'maps' or 'none'")
     kspace = tf.transpose(kspace, [1, 0, 2, 3, 4])                             # (T, C, Z, H, W)
     image_shape = [cfg.base_resolution, cfg.base_resolution]
     z = kspace.shape[2]
@@ -84,7 +87,9 @@ def reconstruct_3d(kspace, traj, dcw, cfg, kz_rotation="aligned"):
     if cfg.normalize_input:
         zfill = tfmr.scale_by_min_max(zfill)
     maps = time_avg_tukey_maps(zfill, cfg)                                     # (Z, H, W, C)
-    zfill = combine_with_maps(tf.transpose(zfill, [0, 2, 3, 4, 1]), maps)[..., None]   # (T, Z, H, W, 1)
+    zfill = tf.transpose(zfill, [0, 2, 3, 4, 1])                               # (T, Z, H, W, C)
+    if cfg.input_combine == "maps":
+        zfill = combine_with_maps(zfill, maps)[..., None]                      # (T, Z, H, W, 1)
     if cfg.target_combine == "maps":
         target = combine_with_maps(tf.transpose(image, [0, 2, 3, 4, 1]), maps)
     else:

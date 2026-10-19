@@ -11,7 +11,7 @@ from synthmr.phantoms.fractal import JuliaConfig, candidate_c, evaluate_field
 from synthmr.phantoms.recipes import random_recipe, render_recipe
 from synthmr.pipeline import Pipeline, get_preset
 from synthmr.recon import AugmentConfig, ReconConfig
-from synthmr.sampling import TrajectoryConfig
+from synthmr.sampling import RadialTrajectoryConfig
 from synthmr.simulation import SimulationConfig
 from tests.regression import fixtures as fx
 from tests.regression.test_phase2b_fractal import fixture_a_grid, fixture_b_grid
@@ -23,8 +23,8 @@ PRESET_FOR = {"A": "fractal_2dt_legacy", "B_cc": "fractal_new_2dt", "B_grouped":
 def configs(fixture):
     """synthmr configs built from the legacy config dicts of ``fixture`` (used to validate presets)."""
     ni, pp, traj = fx.legacy_configs(fixture, pnv, pmc, ptg)
-    return (SimulationConfig.from_legacy(ni), TrajectoryConfig.from_legacy(traj), ReconConfig.from_legacy(pp),
-            AugmentConfig(phases=fx.ROLL_KWARGS["phases"], rotation=fx.ROLL_KWARGS["rotation"]))
+    return (SimulationConfig.from_legacy(ni), RadialTrajectoryConfig.from_legacy(traj),
+            ReconConfig.from_legacy(pp), AugmentConfig(phases=fx.ROLL_KWARGS["phases"], rotation=fx.ROLL_KWARGS["rotation"]))
 
 
 def run_stages(volume, pipeline):

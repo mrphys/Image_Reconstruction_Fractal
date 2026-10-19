@@ -3,7 +3,9 @@ name: add-trajectory
 description: Add a new sampling pattern (in-plane encoder such as radial/spiral/cartesian, or through-plane encoder such as cartesian kz) to synthmr.sampling.
 ---
 1. A `Trajectory` = in-plane encoder (produces `(T, R, 2)` coords + dcw) x through-plane encoder (none | cartesian_kz | ...).
-2. In-plane encoders: add a branch in `synthmr/backend/tf/sampling.py::make_trajectory` (and a `TrajectoryConfig.kind`).
+2. In-plane encoders: add a `XTrajectoryConfig(TrajectoryConfig)` subclass in `synthmr/sampling/__init__.py` holding only
+   that encoder's params (`kind: str = field(init=False, default="x")`), register it in `TRAJECTORY_KINDS`, and add a
+   branch in `synthmr/backend/tf/sampling.py::make_trajectory`.
    Through-plane encoders: add to `synthmr/sampling/encoders.py` (`THROUGH_PLANE`) and handle it in
    `SamplingOperator.forward/adjoint/apply_dcw`; route it in `backend/tf/recon.py::reconstruct`.
 3. Only call MRI ops through `synthmr.backend.get_backend()` (TF code lives in `synthmr/backend/tf/`); random choices through the injected `rng`.

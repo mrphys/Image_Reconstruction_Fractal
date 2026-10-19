@@ -26,7 +26,7 @@ see [Requirements](docs/USER_GUIDE.md#1-requirements)).
 
 ```bash
 # 1. Generate 100 fractal volumes (T=32, Z=10, 256x256), normalised over the whole volume
-python scripts/generate_fractals.py --mode recipe_3dt --n 100 --out data/julia4d --norm volume
+python scripts/generate_fractals.py --mode 3dt --n 100 --out data/julia4d --norm volume
 
 # 2. Turn them into (input, target) training pairs with the 3D+t stack-of-stars preset
 python scripts/make_dataset.py --preset fractal_3dt_sos --input data/julia4d --output data/pairs3d --gifs 3
@@ -35,7 +35,7 @@ python scripts/make_dataset.py --preset fractal_3dt_sos --input data/julia4d --o
 For 2D+t data:
 
 ```bash
-python scripts/generate_fractals.py --mode recipe_2dt --n 50 --out data/julia
+python scripts/generate_fractals.py --mode 2dt --n 50 --out data/julia
 python scripts/make_dataset.py --preset fractal_new_2dt --input data/julia --output data/pairs
 ```
 
@@ -45,7 +45,7 @@ From Python:
 import numpy as np
 from synthmr.pipeline import Pipeline, load_config
 
-cfg = load_config("fractal_3dt_sos", overrides={"trajectory": {"radial_spokes": 21}})
+cfg = load_config("fractal_3dt_sos", overrides={"trajectory": {"spokes": 21}})
 sample = Pipeline(cfg).run(np.load("data/julia4d/julia_000.npy"))
 sample.input.shape, sample.target.shape     # (24, 10, 256, 256, 2), (24, 10, 256, 256, 1)
 ```

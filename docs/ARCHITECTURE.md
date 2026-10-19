@@ -21,13 +21,13 @@ phantom (fractal)  ->  simulation (image -> multicoil k-space)  ->  sampling (tr
 
 ## Usage
 ```
-python scripts/generate_fractals.py --mode recipe_3dt --n 10 --out data/julia4d --norm volume --gifs 2
+python scripts/generate_fractals.py --mode 3dt --n 10 --out data/julia4d --norm volume --gifs 2
 python scripts/make_dataset.py --preset fractal_3dt_sos --input data/julia4d --output data/pairs3d --gifs 2
 python scripts/make_dataset.py --list-presets            # --print-config shows the resolved config
 ```
 ```python
 from synthmr.pipeline import Pipeline, load_config
-cfg = load_config("fractal_new_2dt", overrides={"trajectory": {"radial_spokes": 21}})
+cfg = load_config("fractal_new_2dt", overrides={"trajectory": {"spokes": 21}})
 sample = Pipeline(cfg).run(volume)      # sample.input, sample.target
 ```
 
@@ -47,7 +47,7 @@ sample = Pipeline(cfg).run(volume)      # sample.input, sample.target
   - [x] 3b 3D coil sensitivities: anisotropic 3D Gaussians + 3D background phase (`synthmr/simulation/coils.py`)
   - [x] 3c stack-of-stars: `SamplingOperator(through_plane="cartesian_kz")`, aligned or golden-rotated partitions (`synthmr/sampling/encoders.py`)
   - [x] 3d 3D coil maps: sum over time -> 3D Tukey low-pass in k-space -> 3D Walsh, phase anchored to coil 0 (`backend/tf/recon3d.py`)
-  - [x] 3e preset, h5 output, `generate_fractals.py --mode recipe_3dt`, slice-mosaic / ortho / coil-map GIFs
+  - [x] 3e preset, h5 output, `generate_fractals.py --mode 3dt`, slice-mosaic / ortho / coil-map GIFs
 
 ## 2D vs 3D+t data flow
 | Step | 2D+t (legacy presets) | 3D+t (`fractal_3dt_sos`) |

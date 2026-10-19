@@ -8,7 +8,7 @@ from typing import Optional
 
 from synthmr.recon import AugmentConfig, ReconConfig
 from synthmr.rng import LEGACY_SEEDS
-from synthmr.sampling import TrajectoryConfig
+from synthmr.sampling import RadialTrajectoryConfig, TrajectoryConfig
 from synthmr.simulation import SimulationConfig
 
 
@@ -36,7 +36,7 @@ class PipelineConfig:
     name: str = "custom"
     input: InputConfig = field(default_factory=InputConfig)
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
-    trajectory: TrajectoryConfig = field(default_factory=TrajectoryConfig)
+    trajectory: TrajectoryConfig = field(default_factory=RadialTrajectoryConfig)
     recon: ReconConfig = field(default_factory=ReconConfig)
     augment: AugmentConfig = field(default_factory=AugmentConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
@@ -51,8 +51,16 @@ class PipelineConfig:
         return _from_dict(cls, d)
 
     def updated(self, overrides):
-        """New config with a (possibly nested, partial) dict of overrides applied."""
-        return self.from_dict(_deep_merge(self.to_dict(), overrides or {}))
+        """New config with a (possibly nested, partial) dict of overrides applied.
+
+        Switching ``trajectory.kind`` drops the old kind's params, so the new kind starts from its defaults.
+        """
+        overrides = overrides or {}
+        base = self.to_dict()
+        kind = overrides.get("trajectory", {}).get("kind")
+        if kind is not None and kind != base["trajectory"]["kind"]:
+            base["trajectory"] = {k: base["trajectory"][k] for k in TrajectoryConfig.common_fields()}
+        return self.from_dict(_deep_merge(base, overrides))
 
 
 def _from_dict(cls, d):
@@ -63,7 +71,9 @@ def _from_dict(cls, d):
         raise KeyError(f"{cls.__name__}: unknown keys {sorted(unknown)}")
     for k, v in d.items():
         t = names[k].type
-        kwargs[k] = _from_dict(t, v) if dataclasses.is_dataclass(t) and isinstance(v, dict) else v
+        if dataclasses.is_dataclass(t) and isinstance(v, dict):
+            v = t.from_dict(v) if hasattr(t, "from_dict") else _from_dict(t, v)
+        kwargs[k] = v
     return cls(**kwargs)
 
 

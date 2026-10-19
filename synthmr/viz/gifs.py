@@ -26,7 +26,7 @@ def save_gif(frames, path, title=None, cmap="gray", fps=10, vlim=None):
     save_panel_gif([frames], [title or ""], path, cmap=cmap, fps=fps, vlims=[vlim])
 
 
-def save_panel_gif(panels, titles, path, cmap="gray", fps=10, vlims=None, suptitle=None):
+def save_panel_gif(panels, titles, path, cmap="gray", fps=10, dpi = 72, vlims=None, suptitle=None):
     """Animate several ``(T, H, W)`` arrays side by side with a shared time axis.
 
     Each panel gets its own fixed colour limits (``vlims[i]`` or its min/max).
@@ -52,7 +52,7 @@ def save_panel_gif(panels, titles, path, cmap="gray", fps=10, vlims=None, suptit
 
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     FuncAnimation(fig, update, frames=n_frames, interval=1000 / fps).save(
-        path, writer=PillowWriter(fps=fps), dpi=72)
+        path, writer=PillowWriter(fps=fps), dpi=dpi)
     plt.close(fig)
 
 
@@ -66,12 +66,19 @@ def save_comparison_gif(old, new, path, title=""):
         vlims=[(lo, hi), (lo, hi), None], suptitle=title)
 
 
-def _channels_to_display(x):
+def _channels_to_display(x, complex_channels=True):
+    """Magnitude of ``(..., ch)``: ``[re_1..re_C, im_1..im_C]`` if ``complex_channels`` (ch even), else
+    C magnitude channels. Several coils are root-sum-of-squares combined."""
     x = np.asarray(x)
-    return np.abs(x[..., 0] + 1j * x[..., 1]) if x.shape[-1] == 2 else x[..., 0]
+    if x.shape[-1] == 1:
+        return x[..., 0]
+    if complex_channels:
+        k = x.shape[-1] // 2
+        return np.sqrt(np.sum(x[..., :k] ** 2 + x[..., k:] ** 2, axis=-1))
+    return np.sqrt(np.sum(x ** 2, axis=-1))
 
 
-def save_slice_mosaic_gif(volume, path, title="", cols=None, vlim=None, fps=8):
+def save_slice_mosaic_gif(volume, path, title="", cols=None, vlim=None, fps=8, dpi=72):
     """Animate ``(T, Z, H, W)`` over time with all Z slices tiled in a grid."""
     v = to_display(volume)
     t, z, h, w = v.shape
@@ -81,10 +88,10 @@ def save_slice_mosaic_gif(volume, path, title="", cols=None, vlim=None, fps=8):
     for s in range(z):
         r, c = divmod(s, cols)
         mosaic[:, r * h:(r + 1) * h, c * w:(c + 1) * w] = v[:, s]
-    save_panel_gif([mosaic], [title or f"{z} slices"], path, fps=fps, vlims=[vlim])
+    save_panel_gif([mosaic], [title or f"{z} slices"], path, fps=fps, vlims=[vlim], dpi=dpi)
 
 
-def save_ortho_gif(volume, path, title="", fps=8):
+def save_ortho_gif(volume, path, title="", fps=8, dpi=72):
     """Animate ``(T, Z, H, W)`` over time as three orthogonal views through the centre."""
     v = to_display(volume)
     t, z, h, w = v.shape
@@ -94,13 +101,14 @@ def save_ortho_gif(volume, path, title="", fps=8):
     coronal = np.repeat(v[:, :, h // 2, :], rep, axis=1)
     sagittal = np.repeat(v[:, :, :, w // 2], rep, axis=1)
     save_panel_gif([axial, coronal, sagittal], ["axial (z mid)", "XZ (y mid)", "YZ (x mid)"], path,
-                   vlims=[lim] * 3, suptitle=title, fps=fps)
+                   vlims=[lim] * 3, suptitle=title, fps=fps, dpi=dpi)
 
 
 def save_sample_gifs(sample, out_dir):
     """Input vs target GIFs for a :class:`synthmr.pipeline.Sample` (2D+t or 3D+t)."""
     out_dir = Path(out_dir)
-    inp, tgt = _channels_to_display(sample.input), _channels_to_display(sample.target)
+    complex_input = sample.meta.get("input_format") != "abs"
+    inp, tgt = _channels_to_display(sample.input, complex_input), _channels_to_display(sample.target)
     if inp.ndim == 3:
         save_panel_gif([inp, tgt], ["input |.|", "target |.|"], out_dir / "pair.gif")
     else:

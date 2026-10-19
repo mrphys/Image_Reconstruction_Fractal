@@ -10,7 +10,7 @@ from synthmr.recon import AugmentConfig, ReconConfig
 from synthmr.recon.augment3d import augment_3d
 from synthmr.recon.coil_maps import tukey_window_nd
 from synthmr.rng import RNG
-from synthmr.sampling import TrajectoryConfig, make_trajectory
+from synthmr.sampling import RadialTrajectoryConfig, make_trajectory
 from synthmr.sampling.encoders import kz_trajectories
 from synthmr.simulation import SimulationConfig, simulate
 from synthmr.simulation.coils import simulate_coils_3d
@@ -54,7 +54,7 @@ def test_tukey_window_support():
 
 
 def test_kz_golden_rotation_preserves_radius():
-    traj, _ = make_trajectory(TrajectoryConfig(radial_spokes=5, base_resolution=32, phases=2))
+    traj, _ = make_trajectory(RadialTrajectoryConfig(spokes=5, base_resolution=32, phases=2))
     rot = kz_trajectories(traj.numpy(), 4, "golden")
     assert rot.shape == (2, 4, 5 * 64, 2) and kz_trajectories(traj.numpy(), 4, "aligned") is None
     radius = np.broadcast_to(np.linalg.norm(traj.numpy(), axis=-1)[:, None], rot.shape[:-1])
@@ -69,7 +69,7 @@ def _cplx(shape, seed=0):
 
 @pytest.mark.parametrize("kz", ["aligned", "golden"])
 def test_stack_of_stars_adjoint(kz):
-    traj, dcw = make_trajectory(TrajectoryConfig(radial_spokes=7, base_resolution=32, phases=2))
+    traj, dcw = make_trajectory(RadialTrajectoryConfig(spokes=7, base_resolution=32, phases=2))
     kzt = kz_trajectories(traj.numpy(), 4, kz)
     op = SamplingOperator(traj, dcw, [32, 32], "cartesian_kz", None if kzt is None else tf.constant(kzt))
     x = _cplx((2, 3, 4, 32, 32))
@@ -82,8 +82,8 @@ def test_stack_of_stars_adjoint(kz):
 
 def test_stack_of_stars_fully_sampled_reconstructs():
     n = 32
-    traj, dcw = make_trajectory(TrajectoryConfig(radial_spokes=int(np.pi / 2 * n * 2), base_resolution=n,
-                                                 phases=1, ordering="linear"))
+    traj, dcw = make_trajectory(RadialTrajectoryConfig(spokes=int(np.pi / 2 * n * 2), base_resolution=n,
+                                                       phases=1, ordering="linear"))
     op = SamplingOperator(traj, dcw, [n, n], "cartesian_kz")
     yy, xx = np.mgrid[:n, :n] - n / 2
     disk = ((yy ** 2 + xx ** 2) < (n / 3) ** 2).astype(np.complex64)
@@ -98,7 +98,7 @@ def test_stack_of_stars_fully_sampled_reconstructs():
 
 
 def test_cartesian_kz_with_one_slice_equals_2d_operator():
-    traj, dcw = make_trajectory(TrajectoryConfig(radial_spokes=7, base_resolution=32, phases=2))
+    traj, dcw = make_trajectory(RadialTrajectoryConfig(spokes=7, base_resolution=32, phases=2))
     x = _cplx((2, 3, 32, 32))
     k2 = SamplingOperator(traj, dcw, [32, 32]).forward(x).numpy()
     k3 = SamplingOperator(traj, dcw, [32, 32], "cartesian_kz").forward(x[:, :, None]).numpy()
@@ -112,8 +112,8 @@ def _small_3d_case(seed=0, z=4, t=8, n=64, spokes=21):
     r = np.random.default_rng(seed)
     video = r.uniform(60, 200, (t, z, n, n, 2))
     sim = simulate(video, sim_cfg, rng)
-    traj, dcw = make_trajectory(TrajectoryConfig(radial_spokes=spokes, base_resolution=n, phases=t,
-                                                 ordering="golden_half"))
+    traj, dcw = make_trajectory(RadialTrajectoryConfig(spokes=spokes, base_resolution=n, phases=t,
+                                                       ordering="golden_half"))
     return sim, traj, dcw
 
 
@@ -154,3 +154,53 @@ def test_augment_3d_same_transform_for_all_slices():
     for s in range(1, 5):
         np.testing.assert_array_equal(zr[:, s], zr[:, 0])
     np.testing.assert_array_equal(ir[..., 0], zr[..., 0])
+
+
+def _channels_to_complex(x):
+    c = x.shape[-1] // 2
+    return x[..., :c] + 1j * x[..., c:]
+
+
+def test_reconstruct_3d_uncombined_input():
+    from synthmr.backend.tf.recon3d import combine_with_maps
+    from synthmr.recon import augment
+    sim, traj, dcw = _small_3d_case()
+    kw = dict(base_resolution=64, phases=8, input_format="complex", coil_maps="time_avg_tukey_3d")
+    combined = reconstruct_3d(sim["kspace"], traj, dcw, ReconConfig(**kw))
+    out = reconstruct_3d(sim["kspace"], traj, dcw, ReconConfig(**kw, input_combine="none"))
+    assert out["zfill"].shape == (8, 4, 64, 64, 12) and out["image"].shape == combined["image"].shape
+    # [re_1..re_C, im_1..im_C]: combining the unfolded coils reproduces the default input
+    coils = tf.constant(_channels_to_complex(out["zfill"].numpy()), dtype=combined["maps"].dtype)
+    recombined = combine_with_maps(coils, combined["maps"]).numpy()
+    np.testing.assert_allclose(recombined.real, combined["zfill"].numpy()[..., 0], atol=1e-5)
+    np.testing.assert_allclose(recombined.imag, combined["zfill"].numpy()[..., 1], atol=1e-5)
+    zr, ir = augment(out["zfill"], out["image"], AugmentConfig(phases=6, roll=1, rotation=1), RNG())
+    assert zr.shape == (6, 4, 64, 64, 12) and ir.shape == (6, 4, 64, 64, 1)
+    absout = reconstruct_3d(sim["kspace"], traj, dcw, ReconConfig(**{**kw, "input_format": "abs"},
+                                                                  input_combine="none"))
+    assert absout["zfill"].shape == (8, 4, 64, 64, 6)
+
+
+def test_reconstruct_2d_uncombined_input():
+    import tensorflow_mri as tfmr
+    from synthmr.backend.tf.recon import reconstruct_2d
+    from synthmr.recon import augment
+    n, t, c = 32, 4, 4
+    r = np.random.default_rng(0)
+    kspace = tf.constant((r.standard_normal((c, t, 1, n, n)) + 1j * r.standard_normal((c, t, 1, n, n)))
+                         .astype(np.complex64))
+    traj, dcw = make_trajectory(RadialTrajectoryConfig(spokes=8, base_resolution=n, phases=t))
+    kw = dict(base_resolution=n, phases=t, input_format="complex")
+    combined = reconstruct_2d(kspace, traj, dcw, ReconConfig(**kw))
+    out = reconstruct_2d(kspace, traj, dcw, ReconConfig(**kw, input_combine="none"))
+    assert out["zfill"].shape == (n, n, t, 2 * c) and combined["zfill"].shape == (n, n, t, 2)
+    coils = tf.constant(_channels_to_complex(out["zfill"].numpy()), dtype=combined["maps"].dtype)
+    recombined = tfmr.coils.combine_coils(coils, maps=combined["maps"], coil_axis=-1).numpy()
+    np.testing.assert_allclose(recombined.real, combined["zfill"].numpy()[..., 0], atol=1e-5)
+    np.testing.assert_allclose(recombined.imag, combined["zfill"].numpy()[..., 1], atol=1e-5)
+    zr, _ = augment(out["zfill"], out["image"], AugmentConfig(phases=t, roll=0, rotation=1), RNG())
+    assert zr.shape == (t, n, n, 2 * c)
+    absout = reconstruct_2d(kspace, traj, dcw, ReconConfig(**{**kw, "input_format": "abs"}, input_combine="none"))
+    assert absout["zfill"].shape == (n, n, t, c)
+    with pytest.raises(ValueError):
+        reconstruct_2d(kspace, traj, dcw, ReconConfig(**kw, input_combine="sos"))

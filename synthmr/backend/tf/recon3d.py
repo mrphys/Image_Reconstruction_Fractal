@@ -62,6 +62,8 @@ def reconstruct_3d(kspace, traj, dcw, cfg, kz_rotation="aligned"):
     Returns zfill ``(T, Z, H, W, ch)``, image ``(T, Z, H, W)`` (abs) or ``(T, Z, H, W, 2)``.
     With ``input_combine='none'`` the coils stay in the zfill channels (ch = 2C, or C for abs).
     """
+    if cfg.coil_maps == "jsense":
+        raise NotImplementedError("coil_maps='jsense' needs the sigpy backend")
     if cfg.coil_maps != "time_avg_tukey_3d":
         raise ValueError(f"3D path supports coil_maps='time_avg_tukey_3d', got {cfg.coil_maps!r}")
     if cfg.input_combine not in ("maps", "none"):

@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from synthmr.backend import get_backend
 from synthmr.sampling import RadialTrajectoryConfig, SpiralTrajectoryConfig, TrajectoryConfig, make_trajectory
 
 
@@ -8,7 +9,7 @@ def test_radial_shapes():
     traj, dcw = make_trajectory(RadialTrajectoryConfig(spokes=13, base_resolution=64, phases=4,
                                                        ordering="golden_half"))
     assert tuple(traj.shape) == (4, 13 * 128, 2) and tuple(dcw.shape) == (4, 13 * 128)
-    assert np.abs(traj.numpy()).max() <= np.pi + 1e-6
+    assert np.abs(get_backend().to_numpy(traj)).max() <= np.pi + 1e-6
 
 
 def test_spiral_smoke():

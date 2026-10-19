@@ -5,6 +5,7 @@ Examples::
     python scripts/make_dataset.py --preset fractal_new_2dt --input data/julia --output data/pairs
     python scripts/make_dataset.py --preset fractal_3dt_sos --config my_overrides.yaml \\
         --input data/julia4d --output data/pairs3d --gifs 3
+    python scripts/make_dataset.py --preset fractal_3dt_sos --backend sigpy --input data/julia4d --output out
     python scripts/make_dataset.py --list-presets
 """
 
@@ -29,6 +30,9 @@ def parse_args(argv=None):
     p.add_argument("--gifs", type=int, default=None, help="write GIFs for the first N samples")
     p.add_argument("--format", choices=["npy", "h5"], default=None)
     p.add_argument("--device", default=None, help="e.g. gpu:0 or cpu")
+    p.add_argument("--backend", choices=["tf", "sigpy"], default=None, help="array/MRI backend (default: tf)")
+    p.add_argument("--rng", choices=["backend", "numpy"], default=None,
+                   help="random streams: backend generator (TF: legacy philox) or numpy (same on every backend)")
     p.add_argument("--list-presets", action="store_true")
     p.add_argument("--print-config", action="store_true")
     return p.parse_args(argv)
@@ -41,7 +45,7 @@ def main(argv=None):
     if args.list_presets:
         print("\n".join(sorted(PRESETS)))
         return
-    overrides = {k: v for k, v in {"device": args.device}.items() if v is not None}
+    overrides = {k: v for k, v in {"device": args.device, "backend": args.backend, "rng": args.rng}.items() if v is not None}
     out_over = {k: v for k, v in {"gifs": args.gifs, "format": args.format}.items() if v is not None}
     if out_over:
         overrides["output"] = out_over

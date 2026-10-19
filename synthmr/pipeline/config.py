@@ -8,7 +8,7 @@ from typing import Optional
 
 from synthmr.recon import AugmentConfig, ReconConfig
 from synthmr.rng import LEGACY_SEEDS
-from synthmr.sampling import RadialTrajectoryConfig, TrajectoryConfig
+from synthmr.sampling import TRAJECTORY_KINDS, RadialTrajectoryConfig, TrajectoryConfig
 from synthmr.simulation import SimulationConfig
 
 
@@ -42,6 +42,8 @@ class PipelineConfig:
     output: OutputConfig = field(default_factory=OutputConfig)
     seeds: dict = field(default_factory=lambda: {**LEGACY_SEEDS, "numpy": 0})
     device: Optional[str] = None     # e.g. "gpu:0"; None = backend default placement
+    backend: Optional[str] = None    # tf | sigpy; None = active backend ($SYNTHMR_BACKEND, default tf)
+    rng: str = "backend"             # backend (TF: legacy philox) | numpy (same draws on every backend)
 
     def to_dict(self):
         return dataclasses.asdict(self)
@@ -53,13 +55,17 @@ class PipelineConfig:
     def updated(self, overrides):
         """New config with a (possibly nested, partial) dict of overrides applied.
 
-        Switching ``trajectory.kind`` drops the old kind's params, so the new kind starts from its defaults.
+        Switching ``trajectory.kind`` drops the old kind's params, so the new kind starts from its defaults
+        (shared fields are kept unless the new kind changes their default, e.g. ``file`` has ``reverse=False``).
         """
         overrides = overrides or {}
         base = self.to_dict()
         kind = overrides.get("trajectory", {}).get("kind")
         if kind is not None and kind != base["trajectory"]["kind"]:
-            base["trajectory"] = {k: base["trajectory"][k] for k in TrajectoryConfig.common_fields()}
+            new_defaults = TRAJECTORY_KINDS[kind]().__dict__ if kind in TRAJECTORY_KINDS else {}
+            base_defaults = TRAJECTORY_KINDS[base["trajectory"]["kind"]]().__dict__
+            base["trajectory"] = {k: base["trajectory"][k] for k in TrajectoryConfig.common_fields()
+                                  if k == "kind" or new_defaults.get(k, base_defaults[k]) == base_defaults[k]}
         return self.from_dict(_deep_merge(base, overrides))
 
 

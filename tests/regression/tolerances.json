@@ -1,7 +1,59 @@
 {
   "_comment": "Measured on the unmodified legacy code over 6 GPU runs (Phase 1 + 2a). Every stage is bit-exact run to run except those combined with tfmri Walsh coil maps, whose eigenvector phase is unanchored: worst observed |mag diff| 1.7e-5, worst sign-invariant complex diff 7.6e-3 (signal max ~1). Thresholds ~5x / ~2.5x the worst observed. Never loosen these to make a refactor pass; upstream stages must stay exact.",
   "stages": {
-    "zfill": {"mode": "coilmap_phase", "mag_atol": 1e-4, "atol": 2e-2},
-    "zfill_rolled": {"mode": "coilmap_phase", "mag_atol": 1e-4, "atol": 2e-2}
+    "zfill": {
+      "mode": "coilmap_phase",
+      "mag_atol": 0.0001,
+      "atol": 0.02
+    },
+    "zfill_rolled": {
+      "mode": "coilmap_phase",
+      "mag_atol": 0.0001,
+      "atol": 0.02
+    }
+  },
+  "xbackend": {
+    "_comment": "TF vs sigpy with RNG(kind='numpy'), relative to max|ref| (tests/regression/test_xbackend.py). Measured on CPU at 64^2: simulation <= 7e-7, traj/dcw <= 2.2e-7, uskspace (coil-phase aligned) <= 1.5e-5, |zfill| <= 9e-5, target <= 5e-6. Thresholds ~10-50x. Coil-compressed stages carry the SVD per-coil phase and Walsh-combined ones the unanchored eigenvector phase, hence the phase-invariant modes.",
+    "sim_kspace": {
+      "mode": "rel",
+      "rtol": 1e-05
+    },
+    "sim_smaps": {
+      "mode": "rel",
+      "rtol": 1e-05
+    },
+    "sim_image": {
+      "mode": "rel",
+      "rtol": 1e-05
+    },
+    "traj": {
+      "mode": "rel",
+      "rtol": 1e-06
+    },
+    "dcw": {
+      "mode": "rel",
+      "rtol": 1e-05
+    },
+    "uskspace": {
+      "mode": "coil_phase_rel",
+      "coil_axis": 1,
+      "rtol": 0.0005
+    },
+    "zfill": {
+      "mode": "mag_rel",
+      "rtol": 0.002
+    },
+    "image": {
+      "mode": "rel",
+      "rtol": 0.0001
+    },
+    "input": {
+      "mode": "mag_rel",
+      "rtol": 0.002
+    },
+    "target": {
+      "mode": "rel",
+      "rtol": 0.0001
+    }
   }
 }

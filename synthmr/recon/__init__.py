@@ -20,6 +20,7 @@ class ReconConfig:
     gfilt: Optional[float] = None
     # walsh_xyt_legacy: Walsh on (H, W, T, C), i.e. time treated as a spatial axis (legacy 2D).
     # time_avg_tukey_3d: maps from the time-averaged, Tukey-filtered low-res volume (3D+t).
+    # jsense: sigpy JSENSE on the non-Cartesian data of all frames (2D: (H, W) maps, 3D+t: (Z, H, W)); sigpy only.
     coil_maps: str = "walsh_xyt_legacy"
     tukey_alpha: float = 0.5
     tukey_width: tuple = (1.0, 0.25, 0.25)           # k-space support kept (fraction) along (Z, Y, X)
@@ -28,6 +29,12 @@ class ReconConfig:
     # maps: zfill coil-combined with the estimated maps (1 complex channel).
     # none: coils kept, folded into channels as [re_c1..re_cC, im_c1..im_cC] (abs: C channels).
     input_combine: str = "maps"
+    # coil_maps='jsense' (sigpy.mri.app.JsenseRecon arguments)
+    jsense_ker_width: int = 16
+    jsense_calib_width: int = 24
+    jsense_lamda: float = 0.0
+    jsense_max_iter: int = 10
+    jsense_max_inner_iter: int = 10
 
     def __post_init__(self):
         self.tukey_width = tuple(self.tukey_width)

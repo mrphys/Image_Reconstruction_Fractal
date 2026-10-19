@@ -30,6 +30,10 @@ everything you can do with it and every option you can set.
 - **An NVIDIA GPU.** Dataset creation (`make_dataset.py`) needs one. On CPU, TF 2.10 fails inside the Walsh
   coil-sensitivity estimation: it either segfaults or raises `Eigen decomposition was not successful`.
   Fractal generation (`generate_fractals.py`) is pure numpy/numba and runs fine on CPU.
+- **Or, without TensorFlow: the sigpy container** in `.devcontainer/sigpy/` (CUDA 12, `sigpy`, `cupy`;
+  packages in `requirements-sigpy.txt`). It sets `SYNTHMR_BACKEND=sigpy`, runs on a GPU through cupy and
+  also on CPU (numpy). It supports radial and file-loaded trajectories, not generated spirals (see
+  [Backend](#backend)).
 - Run every command **from the repository root**. The scripts add the repository to `sys.path`, so you
   don't need to install anything.
 
@@ -138,6 +142,8 @@ is saved under the same file stem in `--output`.
 | `--gifs` | from config (`0`) | Write input/target GIFs for the first N samples (sets `output.gifs`) |
 | `--format` | from config | `npy` or `h5` (sets `output.format`) |
 | `--device` | backend default | Device to run on, e.g. `gpu:0`, `gpu:1` (sets `device`) |
+| `--backend` | `$SYNTHMR_BACKEND`, else `tf` | `tf` or `sigpy` (sets `backend`) |
+| `--rng` | `backend` | `backend` or `numpy` random streams (sets `rng`, see [§11](#11-reproducibility-and-random-seeds)) |
 | `--list-presets` | | Print the preset names and exit |
 | `--print-config` | | Print the fully resolved configuration as JSON and exit. Use it to check what your overrides do. |
 
@@ -214,7 +220,9 @@ name  input  simulation  trajectory  recon  augment  output  seeds  device
 |---|---|---|
 | `name` | `"custom"` | Label stored in each sample's metadata |
 | `seeds` | `{transforms: 1, noise: 2, augment: 1, numpy: 0}` | Seeds for the random streams (see [§11](#11-reproducibility-and-random-seeds)) |
-| `device` | `null` | TensorFlow device: `"gpu"`, `"gpu:1"`, `"cpu"`. `null` lets TF choose. |
+| `device` | `null` | Device: `"gpu"`, `"gpu:1"`, `"cpu"`. `null`: TF chooses; sigpy uses GPU 0 if cupy finds one, else the CPU. |
+| `backend` | `null` | `tf` or `sigpy`. `null` uses the active backend (`$SYNTHMR_BACKEND`, else `tf`). |
+| `rng` | `"backend"` | Random streams. `backend`: the backend's generator (TF: philox, reproduces the original code). `numpy`: numpy philox streams, identical on every backend (use it to compare TF and sigpy). |
 
 ### `input`: from stored volume to video
 
@@ -262,7 +270,7 @@ Shared keys:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `kind` | `"radial"` | In-plane trajectory: `radial` or `spiral` (spiral: see note) |
+| `kind` | `"radial"` | In-plane trajectory: `radial`, `spiral` (see note) or `file` (load from `.npy`) |
 | `ordering` | `"tiny_half"` | Spoke angle ordering, passed to `tensorflow_mri.sampling.radial_trajectory`. Common values: `golden_half` (golden angle, half circle), `tiny_half` (tiny golden angle), `sorted_half` (evenly spaced, rotated per frame). Spiral uses e.g. `golden`, `tiny`. |
 | `phases` | `32` | Number of distinct trajectory frames (repeated in time if the recon needs more) |
 | `base_resolution` | `256` | Readout resolution |
@@ -283,9 +291,23 @@ Shared keys:
 | `field_of_view` | `400` | FOV in mm |
 | `vd_spiral_arms`, `min_max_arm_time`, `max_tempres`, `vd_*`, `max_grad_ampl`, `min_rise_time`, `dwell_time`, … | *(see `SpiralTrajectoryConfig`)* | Spiral design parameters: arms, variable-density cutoffs, gradient limits, dwell time, arm-duration window, … |
 
-> **Spiral** trajectories (`kind: spiral`) need the `spiral-waveform` library, which the devcontainer
+`kind: file` keys (trajectory and density from your own `.npy` files; works with every backend):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `traj_path` | `""` | Trajectory, last axis = 2 coordinates in image-axis order `(y, x)`. Shapes `(R, 2)`, `(T, R, 2)`, `(T, V, S, 2)`, or `(V, S, 2)` with `views_axis: true`. |
+| `density_path` | `""` | Density (or weights) with the trajectory's shape minus the last axis |
+| `traj_units` | `"radians"` | `radians`: [-π, π] (tfmri). `pixels`: [-N/2, N/2] with N = `base_resolution` (sigpy / extreme_mri `coord`). |
+| `density_kind` | `"density"` | `density`: weights = 1/density (as for generated radial trajectories). `dcw`: the file already holds density-compensation weights. |
+| `views_axis` | `false` | Read a 3-D array as one frame of `(V, S, 2)` instead of `(T, R, 2)` |
+| `reverse` | `false` | Swap the two coordinates (generated trajectories default to `true`) |
+
+If the file has fewer frames than `phases`, they are repeated in time.
+
+> **Spiral** trajectories (`kind: spiral`) need the `spiral-waveform` library, which the TF devcontainer
 > installs. The trajectory builder supports them, but the pipeline is only tested end to end with radial
-> trajectories. Treat spiral as experimental.
+> trajectories. Treat spiral as experimental. The sigpy backend can't generate spirals; save one (e.g. from
+> the TF container) and load it with `kind: file`.
 
 ### `recon`: undersampling and building the pair
 
@@ -297,7 +319,8 @@ Shared keys:
 | `input_coils` | `10` | both | Number of virtual coils after compression |
 | `output_format` | `"abs"` | both | `abs`: target is 1-channel magnitude. `null`: target as 2 channels (real, imag). |
 | `normalize_input` | `true` | both | Min-max scale the zero-filled coil images before combining |
-| `coil_maps` | `"walsh_xyt_legacy"` | | How coil sensitivities for combining the input are estimated. `walsh_xyt_legacy` (**2D only**): Walsh on `(H, W, T, C)`, i.e. time is treated as a third spatial axis (original behaviour). `time_avg_tukey_3d` (**3D only**): sum all frames, low-pass with a 3D Tukey window in k-space, then 3D Walsh. |
+| `coil_maps` | `"walsh_xyt_legacy"` | | How coil sensitivities for combining the input are estimated. `walsh_xyt_legacy` (**2D only**): Walsh on `(H, W, T, C)`, i.e. time is treated as a third spatial axis (original behaviour). `time_avg_tukey_3d` (**3D only**): sum all frames, low-pass with a 3D Tukey window in k-space, then 3D Walsh. `jsense` (**sigpy backend**, 2D and 3D): JSENSE (`sigpy.mri.app.JsenseRecon`) on the non-Cartesian data of all frames; one time-independent set of maps. |
+| `jsense_ker_width`, `jsense_calib_width`, `jsense_lamda`, `jsense_max_iter`, `jsense_max_inner_iter` | `16`, `24`, `0`, `10`, `10` | `jsense` | JSENSE map kernel width, k-space calibration width (pixels), regularisation and iterations |
 | `tukey_width` | `[1.0, 0.25, 0.25]` | 3D | Fraction of k-space kept along (Z, Y, X) for the coil-map low-pass |
 | `tukey_alpha` | `0.5` | 3D | Taper of the Tukey window (0 = box, 1 = Hann) |
 | `anchor_phase` | `true` | 3D | Reference the coil-map phase to coil 0. This makes the input phase reproducible. The 2D path is unanchored, as in the original. |
@@ -452,10 +475,16 @@ zfill, target = augment(rec["zfill"], rec["image"], cfg.augment, rng)
 
 ### Backend
 
-All MRI operations (FFT, NUFFT, coil compression, Walsh maps, …) go through a backend. TensorFlow is the
-default and currently the only one. `synthmr.backend.set_backend("tf")` / `get_backend()` select it, and
-`register_backend(name, module_path)` adds another. See [BACKEND.md](BACKEND.md) for what a backend must
-provide.
+All MRI operations (FFT, NUFFT, coil compression, Walsh maps, …) go through a backend:
+
+- `tf` (default): TensorFlow / tensorflow-mri, reproduces the original code exactly.
+- `sigpy`: numpy (CPU) or cupy (GPU) with sigpy NUFFTs; needs no TensorFlow. Same stages and same results up
+  to float rounding (see [BACKEND.md](BACKEND.md) for measured differences). It adds `recon.coil_maps: jsense`
+  and lacks generated spirals and `LowPassScaler`.
+
+Select one per pipeline with `backend` in the config (`--backend`), or globally with `$SYNTHMR_BACKEND` /
+`synthmr.backend.set_backend("sigpy")`. `register_backend(name, module_path)` adds another backend. See
+[BACKEND.md](BACKEND.md) for what a backend must provide.
 
 ## 9. Working with fractals directly
 
@@ -578,6 +607,9 @@ Randomness comes from four independent, seeded streams:
   isolated pixels from run to run; the magnitude is stable. The 3D path anchors the phase
   (`recon.anchor_phase`).
 - Fractal generation is separate and reproducible through `--seed`.
+- With `rng: backend` (default) the TF and sigpy backends draw different random numbers. Set `rng: numpy`
+  (`--rng numpy`) to make every backend draw the same ones: the same config and seeds then give the same
+  dataset on TF and sigpy, up to float rounding and the arbitrary coil-map phase.
 
 ## 12. Training a network
 
@@ -601,6 +633,10 @@ python -m pytest tests -q -p no:warnings        # ~1 min on GPU
 - `tests/regression/`: compares the pipeline with stored "golden" outputs of the original code. These tests
   are skipped until you capture the golden outputs once on a GPU:
   `python tests/regression/capture_golden.py --device gpu`. See [REGRESSION.md](REGRESSION.md).
+- In the sigpy container the same command runs only the backend-agnostic tests (TF-only modules aren't
+  collected). `tests/regression/test_xbackend.py` compares sigpy with TF outputs captured by
+  `python tests/regression/capture_xbackend.py` in the TF container. Copy `tests/artifacts/xbackend/`
+  across.
 
 ## 14. Troubleshooting
 
@@ -615,4 +651,8 @@ python -m pytest tests -q -p no:warnings        # ~1 min on GPU
 | Zero-filled or missing slices in 3D | `simulation.slices` doesn't match the volume's Z (it is centre-cropped or zero-padded); regenerate with matching `--slices` or set `simulation.slices` |
 | Intensity flickers between frames/slices | Volumes generated with `--norm frame`; use `--norm volume` for 3D+t |
 | Fewer escape fractals than `--n` | Too many candidates failed the complexity check; run again with another `--seed` or a larger `--n` |
+| `NotImplementedError: spiral trajectories need the TF backend` | sigpy can't generate spirals; use `trajectory.kind: file` with a saved trajectory |
+| `coil_maps='jsense' needs the sigpy backend` | JSENSE is sigpy-only; use `--backend sigpy` |
+| `trajectory exceeds [-pi, pi]` | A `kind: file` trajectory in pixel units read as radians (set `traj_units: pixels`), or the wrong `base_resolution` |
+| sigpy 3D `coil_maps: jsense` is very slow | On CPU, sigpy's 3D gridding is single-threaded; run on a GPU (cupy) |
 | GPU memory taken by another process | `make_dataset.py` turns on TF memory growth; pick a free GPU with `--device gpu:1` |

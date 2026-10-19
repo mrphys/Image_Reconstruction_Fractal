@@ -57,7 +57,7 @@ sample.input.shape, sample.target.shape     # (24, 10, 256, 256, 2), (24, 10, 25
 | [**User guide**](docs/USER_GUIDE.md) | Everything a user needs: both CLIs, all presets, every configuration option, output formats, the Python API and troubleshooting |
 | [Architecture](docs/ARCHITECTURE.md) | Package layout, the processing stages, how 2D and 3D data flow differ |
 | [Data conventions](docs/DATA_CONVENTIONS.md) | Array layouts, axis order, normalisation details |
-| [Backend contract](docs/BACKEND.md) | The TensorFlow backend and how to port it (e.g. to PyTorch) |
+| [Backend contract](docs/BACKEND.md) | The TensorFlow and sigpy (numpy/cupy, TF-free) backends, and how to add another |
 | [Regression testing](docs/REGRESSION.md) | How the refactor is checked against the original code |
 | [Legacy map](docs/LEGACY_MAP.md) | Where each function from the old scripts now lives |
 

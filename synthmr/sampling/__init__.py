@@ -1,6 +1,6 @@
 """Sampling trajectories and operators.
 
-A trajectory is an in-plane encoder (``radial`` | ``spiral``) combined with a
+A trajectory is an in-plane encoder (``radial`` | ``spiral`` | ``file``) combined with a
 through-plane encoder (``none`` for 2D, ``cartesian_kz`` for stack-of-stars /
 stack-of-spirals). Each in-plane encoder has its own config class (``TRAJECTORY_KINDS``).
 New encoders: see .claude/skills/add-trajectory.
@@ -84,13 +84,38 @@ class SpiralTrajectoryConfig(TrajectoryConfig):
         return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in common}
 
 
-TRAJECTORY_KINDS = {"radial": RadialTrajectoryConfig, "spiral": SpiralTrajectoryConfig}
+@dataclass
+class FileTrajectoryConfig(TrajectoryConfig):
+    """Trajectory + density loaded from ``.npy`` files (see :mod:`synthmr.sampling.files`).
+
+    ``traj_units``: ``radians`` ([-pi, pi], synthmr/tfmri) or ``pixels`` ([-N/2, N/2], sigpy/extreme_mri,
+    N = ``base_resolution``). ``density_kind``: ``density`` (dcw = 1/density, as for generated
+    trajectories) or ``dcw`` (used as is). ``views_axis``: read a 3-D array as ``(V, S, 2)`` instead
+    of ``(T, R, 2)``. Fewer frames than ``phases`` are repeated cyclically.
+    """
+
+    kind: str = field(init=False, default="file")
+    reverse: bool = False
+    traj_path: str = ""
+    density_path: str = ""
+    traj_units: str = "radians"
+    density_kind: str = "density"
+    views_axis: bool = False
+
+
+TRAJECTORY_KINDS = {"radial": RadialTrajectoryConfig, "spiral": SpiralTrajectoryConfig,
+                    "file": FileTrajectoryConfig}
 
 
 def make_trajectory(config, backend=None):
     """Return ``(traj (T, R, 2), dcw (T, R))`` backend tensors for the in-plane encoder."""
-    return (backend or get_backend()).sampling.make_trajectory(config)
+    backend = backend or get_backend()
+    if config.kind == "file":
+        from .files import load_trajectory_files
+        traj, dcw = load_trajectory_files(config)
+        return backend.from_numpy(traj), backend.from_numpy(dcw)
+    return backend.sampling.make_trajectory(config)
 
 
-__all__ = ["TrajectoryConfig", "RadialTrajectoryConfig", "SpiralTrajectoryConfig", "TRAJECTORY_KINDS",
-           "make_trajectory"]
+__all__ = ["TrajectoryConfig", "RadialTrajectoryConfig", "SpiralTrajectoryConfig", "FileTrajectoryConfig",
+           "TRAJECTORY_KINDS", "make_trajectory"]

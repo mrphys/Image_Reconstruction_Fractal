@@ -15,7 +15,7 @@ phantom (fractal)  ->  simulation (image -> multicoil k-space)  ->  sampling (tr
 | `synthmr.sampling` | `Trajectory` = in-plane encoder (radial, spiral) x through-plane encoder (none, cartesian kz); `SamplingOperator` | `preprocessing_trajectory_gen.py` |
 | `synthmr.recon` | NUFFT forward/adjoint, coil compression, coil-map strategies, combine, output formats, rolling/rotation | `preprocessing_multicoil_noselect.py` |
 | `synthmr.pipeline` | config dataclasses, presets, `Pipeline`, I/O | the `process_fractals*` functions |
-| `synthmr.backend` | backend packages (`tf/`): core MRI ops + TF stage implementations; only place importing TF-family libs | - |
+| `synthmr.backend` | backend packages: `tf/` (core MRI ops + TF stage implementations; only place importing TF-family libs) and `sigpy/` (numpy/cupy + sigpy port, TF-free) | - |
 | `synthmr.rng` | injected random streams ("transforms", "noise"), no module globals | module-level `rg`, `noise_rg` |
 | `synthmr.viz` | GIFs for human checks | `display_gifs`, `plot_data.py` |
 

@@ -80,6 +80,8 @@ def reconstruct_2d(kspace, traj, dcw, cfg):
     if cfg.normalize_input:
         zfill = tfmr.scale_by_min_max(zfill)
     zfill = tf.transpose(zfill, [2, 3, 0, 1])                             # (H, W, T, C)
+    if cfg.coil_maps == "jsense":
+        raise NotImplementedError("coil_maps='jsense' needs the sigpy backend")
     if cfg.coil_maps != "walsh_xyt_legacy":
         raise ValueError(f"2D path supports coil_maps='walsh_xyt_legacy', got {cfg.coil_maps!r}")
     maps = tfmr.coils.estimate_sensitivities(zfill, method='walsh')      # time acts as a 3rd spatial axis

@@ -1,0 +1,14 @@
+# TF-free environment for the sigpy backend (SYNTHMR_BACKEND=sigpy). Pins target Python 3.10 / CUDA 12
+# (.devcontainer/sigpy). On a CPU-only machine drop cupy-cuda12x: sigpy then runs on numpy.
+numpy==1.26.4
+scipy==1.11.4
+numba==0.59.1
+sigpy==0.1.27
+cupy-cuda12x==13.3.0
+opencv-python-headless==4.10.0.84
+h5py==3.11.0
+pyyaml==6.0.2
+matplotlib==3.8.4
+scikit-image==0.22.0
+pytest==8.3.5
+pyflakes==3.2.0

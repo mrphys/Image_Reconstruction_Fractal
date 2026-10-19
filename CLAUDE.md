@@ -4,7 +4,10 @@
 - Axis/format conventions: docs/DATA_CONVENTIONS.md. Backend contract: docs/BACKEND.md.
 - Only `synthmr/backend/tf/` may import tensorflow / tensorflow_mri / tensorflow_nufft / tensorflow_addons. It holds the core
   MRI ops (`core.py`) plus the TF implementation of each stage; stage modules elsewhere stay backend-free.
-- Tests: `python -m pytest tests -q -p no:warnings` (GPU, ~1 min).
+- Only `synthmr/backend/sigpy/` may import sigpy / cupy (numpy-on-CPU / cupy-on-GPU port of every TF stage, keeping the
+  random-draw order). It must import without TensorFlow (`.devcontainer/sigpy`, `SYNTHMR_BACKEND=sigpy`).
+- Tests: `python -m pytest tests -q -p no:warnings` (GPU, ~1 min). In the sigpy container the TF-only modules are not
+  collected; `tests/regression/test_xbackend.py` replays TF outputs captured with `tests/regression/capture_xbackend.py`.
 - No module-level RNGs: random draws go through the injected `synthmr.rng.RNG` streams (transforms / noise / augment). Draw order in the 2D path must match legacy.
 - Every change to the 2D path must pass the golden regression (skill: regression-check). Golden is GPU-only.
 - Run from the repo root inside the devcontainer (TF 2.10, GPU).

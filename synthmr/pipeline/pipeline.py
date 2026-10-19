@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from synthmr.backend import get_backend
+from synthmr.backend import get_backend, load_backend
 from synthmr.phantoms import complexify
 from synthmr.recon import augment, reconstruct
 from synthmr.rng import RNG
@@ -32,9 +32,9 @@ class Pipeline:
 
     def __init__(self, config, rng=None, backend=None):
         self.config = config
-        self.backend = backend or get_backend()
+        self.backend = backend or (load_backend(config.backend) if config.backend else get_backend())
         seeds = {k: v for k, v in config.seeds.items() if k != "numpy"}
-        self.rng = rng or RNG(seeds, backend=self.backend)
+        self.rng = rng or RNG(seeds, backend=self.backend, kind=config.rng)
         self.np_rng = np.random if config.input.legacy_global_np else np.random.default_rng(
             config.seeds.get("numpy", 0))
         self._traj = None

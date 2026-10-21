@@ -48,7 +48,8 @@ def render_recipe(recipe, grid, max_iter=30, norm_axes=(-2, -1)):
     """Render a recipe over ``grid`` -> complex array of ``grid.shape`` in [-1, 1].
 
     A ``recipe["framing"]`` (see :mod:`synthmr.phantoms.variety`) maps the grid coordinates first; fields marked
-    ``balance`` are gamma-balanced over the whole block.
+    ``balance`` are gamma-balanced over the whole block. A ``recipe["contrast"]`` (see
+    :mod:`synthmr.phantoms.contrast`) then scales each tissue by its enhancement curve over time.
     """
     config = JuliaConfig(c=tuple(recipe["c"]), max_iter=max_iter)
     coords = grid.coordinates()
@@ -61,8 +62,12 @@ def render_recipe(recipe, grid, max_iter=30, norm_axes=(-2, -1)):
         return balance(v) if f.get("balance") else v
 
     parts = {part: [field(f) for f in recipe[part]["fields"]] for part in ("real", "imag")}
-    return recipe_complex(parts["real"], parts["imag"], recipe["real"]["weights"],
-                          recipe["imag"]["weights"], norm_axes=norm_axes)
+    block = recipe_complex(parts["real"], parts["imag"], recipe["real"]["weights"],
+                           recipe["imag"]["weights"], norm_axes=norm_axes)
+    if "contrast" in recipe:
+        from .contrast import apply_contrast, signal_scale
+        block = apply_contrast(block, signal_scale(coords, grid, recipe["contrast"], config))
+    return block
 
 
 __all__ = ["FIELD_CHOICES", "random_channel", "random_recipe", "describe", "render_recipe",

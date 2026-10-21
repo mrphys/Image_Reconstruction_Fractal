@@ -53,3 +53,50 @@ def test_random_rotation_is_special_orthogonal():
 def test_unknown_step():
     with pytest.raises(ValueError):
         Variety.from_steps("frame,zoomies")
+
+
+def test_contrast_keeps_other_draws_and_rerenders_from_json():
+    base = _run("frame,warp")
+    dyn = _run("frame,warp,contrast")
+    for (_, r0, b0), (_, r1, b1) in zip(base, dyn):
+        assert {k: v for k, v in r1.items() if k != "contrast"} == r0
+        assert len(r1["contrast"]["curves"]) == len(r1["contrast"]["levels"]) + 2
+        assert b1.shape == b0.shape and np.isfinite(b1).all()
+        assert np.abs(b1.real).max() <= 1 + 1e-6 and np.abs(b1.imag).max() <= 1 + 1e-6
+        again = render_recipe(json.loads(json.dumps(r1, default=list)), DOM.grid(), norm_axes=None)
+        np.testing.assert_allclose(again, b1, atol=1e-6)
+
+
+def test_contrast_curves_and_memberships():
+    from synthmr.phantoms.contrast import CURVES, curve, memberships
+    u = np.linspace(0, 1, 2001)
+    rng = np.random.default_rng(0)
+    for kind, draw in CURVES.items():
+        onset, tau_in, tau_out, scale = draw(rng)
+        c = {"onset": onset, "tau_in": tau_in, "tau_out": tau_out, "peak": 1.5 * scale}
+        e = curve(c, u)
+        assert np.all(e[u <= onset] == 0) and e.min() >= 0
+        if kind == "static":
+            assert not e.any()
+        elif tau_out is not None:
+            assert np.isclose(e.max(), c["peak"], rtol=1e-3)
+    labels = np.random.default_rng(1).integers(0, 3, size=DOM.grid().shape)
+    m = memberships(labels, 3, DOM.grid(), 1.5)
+    np.testing.assert_allclose(m.sum(0), 1, atol=1e-5)
+    assert m.min() >= 0
+
+
+def test_contrast_scales_tissues_by_their_curves():
+    from synthmr.phantoms.contrast import curve, signal_scale, time_axis, tissue_labels
+    from synthmr.phantoms.fractal import JuliaConfig
+    (_, recipe, _), = _run("frame,contrast", 1)
+    grid = DOM.grid()
+    cfg = JuliaConfig(c=tuple(recipe["c"]), max_iter=DOM.max_iter)
+    coords = apply_framing(grid.coordinates(), recipe["framing"])
+    con = dict(recipe["contrast"], softness=0.0)     # hard labels: every voxel follows its tissue's curve
+    s = signal_scale(coords, grid, con, cfg)
+    labels = tissue_labels(coords, con, cfg)
+    u = np.broadcast_to(time_axis(grid), s.shape)
+    expected = np.choose(labels, [1 + curve(c, u) for c in con["curves"]])
+    np.testing.assert_allclose(s, expected, atol=1e-5)
+    assert len(np.unique(labels)) > 1

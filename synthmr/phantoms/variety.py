@@ -12,6 +12,8 @@ Steps (all off in ``Variety()``, so the plain recipe protocol and its fixtures a
 ``warp``        smooth fBm domain warp of the coordinates; strength and noise scale are relative to the window.
 ``permute``     random assignment of quaternion components to the array axes (which one is time, slices, ...).
 ``rotate``      Haar-random 4-D rotation of the sampling grid (oblique sections; subsumes ``permute``).
+``contrast``    tissue-specific enhancement curves over time (see :mod:`synthmr.phantoms.contrast`), stored in
+                ``recipe["contrast"]``.
 
 A framing is stored in the recipe (``recipe["framing"]``) so :func:`~synthmr.phantoms.recipes.render_recipe`
 re-renders it from the metadata JSON.
@@ -23,9 +25,10 @@ from typing import Optional, Tuple
 import numpy as np
 from scipy.ndimage import zoom as _resize
 
+from .contrast import Contrast, draw_contrast
 from .fractal import Axis, Grid, JuliaConfig, domain_warp, evaluate_field
 
-STEPS = ("frame", "reject", "background", "warp", "permute", "rotate")
+STEPS = ("frame", "reject", "background", "warp", "permute", "rotate", "contrast")
 
 
 @dataclass
@@ -39,6 +42,7 @@ class Variety:
     permute: bool = False
     rotate: bool = False
     preview: int = 16                            # preview points per axis
+    contrast: Optional[Contrast] = None          # tissue enhancement curves (contrast)
 
     @classmethod
     def from_steps(cls, steps):
@@ -52,11 +56,13 @@ class Variety:
         return cls(zoom=(0.4, 0.75) if "frame" in steps else None,
                    min_detail=0.6 if "reject" in steps else None,
                    background="background" in steps, warp=0.15 if "warp" in steps else None,
-                   permute="permute" in steps, rotate="rotate" in steps)
+                   permute="permute" in steps, rotate="rotate" in steps,
+                   contrast=Contrast() if "contrast" in steps else None)
 
     @property
     def active(self):
-        return any((self.zoom, self.min_detail is not None, self.background, self.warp, self.permute, self.rotate))
+        return any((self.zoom, self.min_detail is not None, self.background, self.warp, self.permute, self.rotate,
+                    self.contrast is not None))
 
 
 def random_rotation(rng):
@@ -170,7 +176,8 @@ def vary_recipe(recipe, grid, max_iter, variety, seed, redraw):
     """Recipe with ``framing`` (and ``background`` enrichment) per ``variety``. ``seed`` (a ``SeedSequence``) is
     split into one stream per step; ``redraw(rng)`` gives a new recipe when no framing of the current ``c`` reaches
     ``min_detail``."""
-    rngs = dict(zip(("orient", "frame", "warp", "background", "redraw"), map(np.random.default_rng, seed.spawn(5))))
+    rngs = dict(zip(("orient", "frame", "warp", "background", "redraw", "contrast"),
+                    map(np.random.default_rng, seed.spawn(6))))
     best = None
     for attempt in range(variety.redraws + 1 if variety.min_detail is not None else 1):
         framing, detail = draw_framing(grid, recipe["c"], max_iter, variety, rngs)
@@ -184,4 +191,6 @@ def vary_recipe(recipe, grid, max_iter, variety, seed, redraw):
     if variety.background:
         out["real"] = enrich_channel(recipe["real"], rngs["background"])
         out["imag"] = enrich_channel(recipe["imag"], rngs["background"])
+    if variety.contrast is not None:
+        out["contrast"] = draw_contrast(rngs["contrast"], variety.contrast)
     return out

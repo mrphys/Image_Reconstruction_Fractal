@@ -90,6 +90,7 @@ the real part and for the imaginary part separately, a weighted mix of 1–2 ran
 | `--slices` | `10` | Recipe modes only: number of slices `Z` |
 | `--max-iter` | escape: `50`, recipe: `30` | Maximum Julia iterations. Higher values give finer detail and take longer. |
 | `--norm` | `frame` | Recipe modes only. `frame` min-max normalises every 2D frame separately (legacy behaviour; intensity flickers over time and slices). `volume` normalises over the whole block. **Use `volume` for 3D+t.** |
+| `--variety` | `none` | Recipe modes only: per-phantom variety steps, comma-separated or `all` (see [below](#phantom-variety)) |
 | `--gifs` | `0` | Write preview GIFs for the first N files |
 
 ### Output files
@@ -119,7 +120,29 @@ The `2dt` and `3dt` modes sample 4D quaternion space `(w, x, y, z)` as follows (
 | slices (Z) | y | centred on 0, step 0.1 |
 
 The bounds, time range and slice step are not CLI options. To change them, call `generate()` from Python
-with your own `FractalDomain` (see [§9](#9-working-with-fractals-directly)).
+with your own `FractalDomain` (see [§9](#9-working-with-fractals-directly)). `FractalDomain.isotropic(n, extent,
+frames)` gives the `n^3` grid used by `scripts/make_cone_pairs.py`.
+
+### Phantom variety
+
+With the fixed domain above, about 60% of voxels escape within two iterations, so they are flat background.
+`--variety` (`Variety` in `synthmr/phantoms/variety.py`) changes how each recipe is framed. Every step is off by
+default:
+
+| Step | Effect |
+|---|---|
+| `frame` | Zoom into a random window (0.4–0.75 of the domain) centred on a boundary point of the set. The scale applies to all four components, so the slice spacing and the time sweep shrink with the field of view. |
+| `reject` | Reframe (up to 8 tries), then redraw `c` (up to 10 times), until the boundary band `2 < escape < max_iter` covers at least 60% of a coarse preview |
+| `background` | Each real/imag channel gets a `distance` or `orbit_trap` field, which varies outside the set. Every field is gamma-balanced so that its median maps to 0.5. |
+| `warp` | Smooth fBm domain warp (strength 0.15 of the window half-width) |
+| `permute` | Random assignment of the quaternion components to the axes (T, Z, H, W) |
+| `rotate` | Random 4D rotation of the sampling grid (oblique sections; includes `permute`) |
+
+The framing is saved in the recipe (`recipe["framing"]`), so `render_recipe` re-renders it from the JSON.
+Each step draws from its own child of the seed, so enabling a step does not change `c`, the field mix or
+the other steps' draws. The exception is a phantom that `reject` redraws, and that redraw does not affect other
+phantoms. `python scripts/review_variety.py` writes GIFs that add the steps one
+at a time.
 
 ## 4. Step 2: making a dataset
 

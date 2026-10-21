@@ -6,7 +6,7 @@ seeded ``np.random.Generator`` gives the same recipes as the original script.
 
 
 from .complexify import recipe_complex
-from .fractal import JuliaConfig, QuaternionJulia, evaluate_field
+from .fractal import JuliaConfig, QuaternionJulia, balance, evaluate_field
 
 # Field recipes: kind -> sampler of extra params.
 FIELD_CHOICES = {
@@ -45,14 +45,22 @@ def describe(channel):
 
 
 def render_recipe(recipe, grid, max_iter=30, norm_axes=(-2, -1)):
-    """Render a recipe over ``grid`` -> complex array of ``grid.shape`` in [-1, 1]."""
+    """Render a recipe over ``grid`` -> complex array of ``grid.shape`` in [-1, 1].
+
+    A ``recipe["framing"]`` (see :mod:`synthmr.phantoms.variety`) maps the grid coordinates first; fields marked
+    ``balance`` are gamma-balanced over the whole block.
+    """
     config = JuliaConfig(c=tuple(recipe["c"]), max_iter=max_iter)
     coords = grid.coordinates()
-    parts = {
-        part: [evaluate_field(coords, f["kind"], {**f["params"], "config": config})
-               for f in recipe[part]["fields"]]
-        for part in ("real", "imag")
-    }
+    if "framing" in recipe:
+        from .variety import apply_framing
+        coords = apply_framing(coords, recipe["framing"])
+
+    def field(f):
+        v = evaluate_field(coords, f["kind"], {**f["params"], "config": config})
+        return balance(v) if f.get("balance") else v
+
+    parts = {part: [field(f) for f in recipe[part]["fields"]] for part in ("real", "imag")}
     return recipe_complex(parts["real"], parts["imag"], recipe["real"]["weights"],
                           recipe["imag"]["weights"], norm_axes=norm_axes)
 

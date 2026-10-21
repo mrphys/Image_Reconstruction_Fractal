@@ -1,6 +1,7 @@
 """Quaternion fractal fields and grids (moved from ``app/fractal_framework``)."""
 
 from .channels import (
+    balance,
     complex_channels,
     compose_channel,
     compose_complex,
@@ -17,7 +18,7 @@ from .warp import domain_warp
 __all__ = [
     "QuaternionJulia", "JuliaConfig", "Slice", "FieldSpec", "render_fields",
     "FIELD_REGISTRY", "register_field", "evaluate_field", "Axis", "Grid",
-    "normalise", "remap", "compose_channel", "compose_complex",
+    "normalise", "balance", "remap", "compose_channel", "compose_complex",
     "complex_channels", "stack_channels", "domain_warp",
     "mandelbrot_escape", "mandelbrot_grid_4d", "candidate_c",
 ]

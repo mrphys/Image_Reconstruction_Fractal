@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from synthmr.phantoms.generate import FractalDomain, LegacyDomain, generate  # noqa: E402
+from synthmr.phantoms.variety import STEPS, Variety  # noqa: E402
 
 
 def main(argv=None):
@@ -28,6 +29,8 @@ def main(argv=None):
     p.add_argument("--max-iter", type=int, default=None)
     p.add_argument("--norm", choices=["frame", "volume"], default="frame",
                    help="frame = legacy per-2D-frame normalisation; volume = consistent across T and Z")
+    p.add_argument("--variety", default="none",
+                   help=f"2dt/3dt: comma-separated variety steps from {','.join(STEPS)}, or 'all' / 'none'")
     p.add_argument("--gifs", type=int, default=0, help="write GIFs for the first N outputs")
     a = p.parse_args(argv)
     if a.mode == "legacy":
@@ -35,7 +38,8 @@ def main(argv=None):
     else:
         dom = FractalDomain(shape=tuple(a.size), frames=a.frames, slices=a.slices,
                             **({"max_iter": a.max_iter} if a.max_iter else {}))
-    paths = generate(a.mode, a.n, a.out, seed=a.seed, domain=dom, norm=a.norm)
+    paths = generate(a.mode, a.n, a.out, seed=a.seed, domain=dom, norm=a.norm,
+                     variety=Variety.from_steps(a.variety))
     if a.gifs:
         import numpy as np
         from synthmr.viz.gifs import save_gif, save_ortho_gif, save_slice_mosaic_gif

@@ -22,6 +22,14 @@ def normalise(x, low=None, high=None, eps=1e-8, axes=None):
     return (x - lo) / np.asarray(den, dtype=np.float64).astype(np.float32)
 
 
+def balance(x, target=0.5, limits=(0.25, 4.0)):
+    """Normalise ``x`` to [0, 1] and apply the gamma (clipped to ``limits``) that maps its median to ``target``."""
+    x = normalise(x)
+    med = float(np.median(x))
+    gamma = np.clip(np.log(target) / np.log(min(max(med, 1e-6), 1 - 1e-6)), *limits)
+    return x ** np.float32(gamma)
+
+
 def remap(x, mode="normalise", **kwargs):
     """Apply one of the notebook-inspired scalar remappings."""
     x = np.asarray(x, dtype=np.float32)

@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from synthmr.backend.sigpy.recon3d import combine_with_maps, time_avg_tukey_maps  # noqa: E402
 from synthmr.phantoms.generate import FractalDomain, _write_meta, iter_recipes_3dt  # noqa: E402
+from synthmr.phantoms.variety import STEPS, Variety  # noqa: E402
 from synthmr.recon import ReconConfig  # noqa: E402
 from synthmr.rng import RNG  # noqa: E402
 from synthmr.simulation.coils import simulate_coils_3d  # noqa: E402
@@ -39,10 +40,7 @@ MAPS_CFG = ReconConfig(coil_maps="time_avg_tukey_3d", tukey_width=(0.25, 0.25, 0
 
 def cone_domain(extent, frames, n=64):
     """Isotropic n^3 domain: voxel ``v = extent / n``; bounds +-(n-1)/2 v make the linspace step equal ``v``."""
-    v = extent / n
-    half = (n - 1) / 2 * v
-    return FractalDomain(shape=(n, n), slices=n, slice_step=v, bounds=((-half, half),) * 2, frames=frames,
-                         time_range=(-0.3, 0.3), max_iter=30)
+    return FractalDomain.isotropic(n, extent, frames)
 
 
 def load_trajectory(frames_total, frames, n=64):
@@ -155,6 +153,8 @@ def main(argv=None):
     p.add_argument("--size", type=int, default=64, help="isotropic grid size n (n^3 voxels)")
     p.add_argument("--out", default=None, help="default: new_julia_grasp_cone_paired[_<size> if size != 64]")
     p.add_argument("--phantom-out", default=None, help="default: julia_cone_3dt[_<size> if size != 64]")
+    p.add_argument("--variety", default="none",
+                   help=f"phantom variety steps: comma-separated from {','.join(STEPS)}, or 'all' / 'none'")
     p.add_argument("--plots", action="store_true", help="write review plots for the first sample")
     p.add_argument("--device", type=int, default=0, help="cupy device id; -1 = CPU")
     a = p.parse_args(argv)
@@ -182,13 +182,14 @@ def main(argv=None):
           f"({traj_meta['samples_per_frame'] / N ** 3:.2f} x {N}^3)")
     domain = cone_domain(a.extent, a.frames, N)
 
-    for k, recipe, block in iter_recipes_3dt(domain, a.n, a.seed, norm="volume"):
+    for k, recipe, block in iter_recipes_3dt(domain, a.n, a.seed, norm="volume",
+                                              variety=Variety.from_steps(a.variety)):
         t0 = time.time()
         name = f"julia_{k:03d}"
         ph_path = ph_out / f"{name}.npy"
         np.save(ph_path, np.stack([block.real, block.imag], -1).astype(np.float16))
         meta = {"mode": "3dt", "recipe": recipe, "domain": asdict(domain), "norm": "volume", "extent": a.extent,
-                "size": N, "voxel": a.extent / N, "seed": a.seed}
+                "size": N, "voxel": a.extent / N, "seed": a.seed, "variety": a.variety}
         _write_meta(ph_path, meta)
 
         seeds = {"transforms": 2 * (a.seed * 1_000_000 + k) + 1, "noise": 2 * (a.seed * 1_000_000 + k) + 2}

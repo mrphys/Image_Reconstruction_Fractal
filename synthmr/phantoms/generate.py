@@ -84,7 +84,6 @@ def generate(mode, n, out_dir, seed=0, domain=None, norm="frame", candidates=Non
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     candidates = default_candidates() if candidates is None else candidates # candidates based on mandelbrot
-    norm_axes = (-2, -1) if norm == "frame" else None
     written = []
     if mode == "legacy":
         domain = domain or LegacyDomain() # base-repo escape-time domain
@@ -105,10 +104,7 @@ def generate(mode, n, out_dir, seed=0, domain=None, norm="frame", candidates=Non
         return written
 
     domain = domain or FractalDomain()
-    grid = domain.grid()
-    for k in range(n):
-        recipe = random_recipe(rng, candidates[rng.integers(len(candidates))])
-        block = render_recipe(recipe, grid, max_iter=domain.max_iter, norm_axes=norm_axes)   # (T, Z, H, W)
+    for k, recipe, block in iter_recipes_3dt(domain, n, rng, norm, candidates):
         meta = {"mode": mode, "recipe": recipe, "domain": asdict(domain), "norm": norm}
         if mode == "2dt":
             for s in range(block.shape[1]):
@@ -124,6 +120,26 @@ def generate(mode, n, out_dir, seed=0, domain=None, norm="frame", candidates=Non
         else:
             raise ValueError(f"unknown mode {mode!r}")
     return written
+
+
+def iter_recipes_3dt(domain, n, seed=0, norm="frame", candidates=None):
+    """
+    Draw and render ``n`` random recipes on ``domain``; yields ``(k, recipe, block)`` with block ``(T, Z, H, W)``.
+
+    Args:
+        domain: FractalDomain.
+        n: int, number of recipes.
+        seed: int or ``np.random.Generator`` (shared with the caller, as in :func:`generate`).
+        norm: str, "frame" or "volume".
+        candidates: list of complex numbers for Julia parameter c; if None, defaults are used.
+    """
+    rng = seed if isinstance(seed, np.random.Generator) else np.random.default_rng(seed)
+    candidates = default_candidates() if candidates is None else candidates
+    norm_axes = (-2, -1) if norm == "frame" else None
+    grid = domain.grid()
+    for k in range(n):
+        recipe = random_recipe(rng, candidates[rng.integers(len(candidates))])
+        yield k, recipe, render_recipe(recipe, grid, max_iter=domain.max_iter, norm_axes=norm_axes)
 
 
 def _write_meta(path, meta):
